@@ -71,7 +71,7 @@ export function LoginForm() {
       </button>
       <p className="caption text-center">
         No account?{" "}
-        <Link href="/signup" className="font-medium text-indigo-700 hover:underline">
+        <Link href="/signup" className="font-medium text-accent hover:underline">
           Sign up
         </Link>
       </p>

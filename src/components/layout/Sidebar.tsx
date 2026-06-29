@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { DarkModeToggle } from "@/components/layout/DarkModeToggle";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard" },
@@ -10,6 +11,9 @@ const navItems = [
   { href: "/resumes", label: "Resumes" },
   { href: "/resume-tailor", label: "Resume Tailor" },
   { href: "/resume-match", label: "Resume Match" },
+  { href: "/outreach", label: "Outreach" },
+  { href: "/analytics", label: "Analytics" },
+  { href: "/ai-evaluation", label: "AI Evaluation" },
   { href: "/contacts", label: "Contacts" },
 ];
 
@@ -25,12 +29,12 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-6 py-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
+    <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border bg-surface md:w-64">
+      <div className="border-b border-border px-5 py-5 md:px-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">
           Job Search
         </p>
-        <h1 className="mt-1 text-lg font-semibold text-slate-900">
+        <h1 className="mt-1 text-lg font-semibold text-foreground">
           Command Center
         </h1>
       </div>
@@ -44,8 +48,8 @@ export function Sidebar() {
               href={item.href}
               className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
                 active
-                  ? "bg-indigo-50 text-indigo-800"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-panel-subtle hover:text-foreground"
               }`}
             >
               {item.label}
@@ -54,7 +58,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-slate-200 p-4">
+      <div className="space-y-3 border-t border-border p-4">
+        <DarkModeToggle />
         <button
           type="button"
           onClick={handleLogout}

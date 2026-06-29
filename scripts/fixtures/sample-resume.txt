@@ -1,0 +1,27 @@
+Alex Rivera
+Full-stack product engineer
+
+Summary
+TypeScript and React engineer with 6 years of experience shipping SaaS products, developer tools, and AI-assisted workflows. Strong in Next.js, Node.js, PostgreSQL, Supabase, API design, authentication, observability, and pragmatic product delivery.
+
+Experience
+Senior Software Engineer, AtlasWorks
+- Built customer-facing analytics dashboards with React, Next.js, TypeScript, Tailwind CSS, accessible components, and server-rendered routes.
+- Designed Node.js REST APIs backed by PostgreSQL schemas, migrations, row-level authorization, and background job processing.
+- Deployed Dockerized services on AWS, improved CI/CD reliability, and added structured logs, traces, and incident playbooks.
+- Created LLM-powered review workflows using prompt templates, structured JSON outputs, retrieval from resume content, human approval queues, and evaluation datasets.
+- Led code reviews, system design sessions, incident retrospectives, and roadmap tradeoff discussions for a team of five engineers.
+
+Product Engineer, BrightLoop
+- Implemented onboarding email workflows, webhook integrations, OAuth flows, customer-facing logs, and API troubleshooting tools.
+- Built experimentation and event tracking dashboards for growth teams, including A/B test reporting and funnel-style analysis.
+- Wrote developer-facing API documentation, authentication guides, and example applications.
+- Partnered with customer success on technical debugging, stakeholder communication, and onboarding documentation.
+
+Projects
+- Resume Match Evaluator: prompt evaluation suite for matching resumes to job descriptions with precision and recall tracking.
+- Outreach Command Center: Supabase-backed outreach workflow with draft generation, outcome tracking, analytics, and no-raw-data insight prompts.
+- Research Toolkit: Python scripts for reproducible experiments, data visualization, and lightweight machine learning model evaluation.
+
+Skills
+TypeScript, React, Next.js, Node.js, PostgreSQL, Supabase, SQL, Python, AWS, Docker, CI/CD, Playwright, Tailwind CSS, API design, REST APIs, OAuth, webhooks, observability, authentication, analytics dashboards, prompt evaluation, LLM workflows, retrieval, structured JSON, system design, code review, documentation, stakeholder communication.

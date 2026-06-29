@@ -58,6 +58,7 @@ Open [http://localhost:3000](http://localhost:3000).
 Run migration `supabase/migrations/002_ai_call_logs.sql` after Phase 1.
 Run migration `supabase/migrations/003_resume_match_results.sql` for resume match (Phase 3).
 Run migration `supabase/migrations/004_resumes.sql` for resume storage and tailoring (Phase 4).
+Run migration `supabase/migrations/005_outreach_emails.sql` for outreach drafts (Phase 5).
 
 Environment variables (see `.env.local.example`):
 

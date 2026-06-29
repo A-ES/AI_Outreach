@@ -6,6 +6,7 @@ import type { ResumeContent } from "@/lib/validation/resume";
 import { emptyResumeContent } from "@/lib/validation/resume";
 import { formatDate } from "@/lib/utils/dates";
 import { ResumeStructuredEditor } from "@/components/resumes/ResumeStructuredEditor";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export function ResumesView() {
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -135,19 +136,22 @@ export function ResumesView() {
         {loading ? (
           <p className="caption">Loading…</p>
         ) : resumes.length === 0 ? (
-          <p className="caption">No saved resume versions yet.</p>
+          <EmptyState
+            title="No saved resume versions"
+            description="Save a structured base resume first. Tailored versions will appear here after you approve them."
+          />
         ) : (
           <div className="space-y-2">
             {resumes.map((resume) => (
               <div
                 key={resume.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-border bg-surface px-4 py-3"
               >
                 <div>
                   <p className="text-sm font-medium">
                     {resume.version_label}
                     {resume.is_base_resume && (
-                      <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">
+                      <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
                         Base
                       </span>
                     )}
@@ -161,7 +165,7 @@ export function ResumesView() {
                   <button
                     type="button"
                     onClick={() => startEdit(resume)}
-                    className="text-sm text-indigo-700 hover:underline"
+                    className="text-sm text-accent hover:underline"
                   >
                     Edit
                   </button>
@@ -169,7 +173,7 @@ export function ResumesView() {
                     <button
                       type="button"
                       onClick={() => handleSetBase(resume.id)}
-                      className="text-sm text-indigo-700 hover:underline"
+                      className="text-sm text-accent hover:underline"
                     >
                       Set as base
                     </button>

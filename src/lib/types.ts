@@ -139,3 +139,130 @@ export interface FlaggedClaim {
   claim: string;
   reason: string;
 }
+
+export type OutreachEmailStatus = "draft" | "approved" | "sent" | "rejected";
+
+export type OutreachOutcome =
+  | "no_reply"
+  | "positive"
+  | "rejection"
+  | "interview_request";
+
+export interface OutreachEmail {
+  id: string;
+  user_id: string;
+  contact_id: string;
+  application_id: string | null;
+  subject: string;
+  body: string;
+  status: OutreachEmailStatus;
+  date_drafted: string;
+  date_sent: string | null;
+  reply_received: boolean;
+  outcome: OutreachOutcome | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutreachEmailWithContact extends OutreachEmail {
+  contacts?: {
+    name: string;
+    email: string | null;
+    company_name: string | null;
+    role_title: string | null;
+  } | null;
+}
+
+export const OUTREACH_STATUS_LABELS: Record<OutreachEmailStatus, string> = {
+  draft: "Draft",
+  approved: "Approved",
+  sent: "Sent",
+  rejected: "Rejected",
+};
+
+export const OUTREACH_OUTCOME_LABELS: Record<OutreachOutcome, string> = {
+  no_reply: "No reply",
+  positive: "Positive",
+  rejection: "Rejection",
+  interview_request: "Interview request",
+};
+
+export type AnalyticsEmailLengthBucket =
+  | "Short (<100 words)"
+  | "Medium (100-180 words)"
+  | "Long (181+ words)";
+
+export interface AnalyticsRateBucket {
+  label: string;
+  sent_count: number;
+  reply_count: number;
+  reply_rate: number;
+}
+
+export interface OutcomeAnalyticsStats {
+  logged_outcome_count: number;
+  sent_count: number;
+  reply_count: number;
+  overall_reply_rate: number;
+  by_resume_version: AnalyticsRateBucket[];
+  by_day_sent: AnalyticsRateBucket[];
+  by_email_length: AnalyticsRateBucket[];
+  reply_rate_over_time: AnalyticsRateBucket[];
+}
+
+export interface InsightResult {
+  observation: string;
+  evidence: string[];
+  possible_reason: string;
+  confidence: "low" | "medium" | "high";
+  sample_size_note: string;
+}
+
+export interface InsufficientDataResult {
+  insufficient_data: true;
+  current_count: number;
+  required_count: number;
+}
+
+export type AnalyticsResult = InsightResult | InsufficientDataResult;
+
+export interface AnalyticsApiResponse {
+  stats: OutcomeAnalyticsStats;
+  insight: AnalyticsResult | null;
+  insight_error: string | null;
+  required_count: number;
+}
+
+export interface EvalTestCase {
+  id: string;
+  job_description_text: string;
+  expected_keywords: string[];
+  expected_missing_skills: string[];
+  expected_match_range_min: number;
+  expected_match_range_max: number;
+  created_at: string;
+}
+
+export interface EvalRunResult {
+  id: string;
+  eval_test_case_id: string;
+  run_timestamp: string;
+  actual_match_score: number;
+  keyword_precision: number;
+  keyword_recall: number;
+  passed: boolean;
+  notes: string | null;
+}
+
+export interface AiEvaluationMetrics {
+  latest_run_timestamp: string | null;
+  eval_case_count: number;
+  resume_match_accuracy: number;
+  average_keyword_precision: number;
+  average_keyword_recall: number;
+  tailoring_hallucinations_detected: number;
+  average_generation_time_ms: number;
+  average_cost_per_request: number;
+  average_confidence_score: number | null;
+  total_eval_runs: number;
+}

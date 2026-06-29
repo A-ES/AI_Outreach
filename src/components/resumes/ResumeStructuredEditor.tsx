@@ -224,8 +224,8 @@ function Section({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-800">{title}</h3>
-        <button type="button" onClick={onAdd} className="caption text-indigo-700 hover:underline">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        <button type="button" onClick={onAdd} className="caption text-accent hover:underline">
           + Add
         </button>
       </div>
@@ -242,7 +242,7 @@ function EntryCard({
   onRemove: () => void;
 }) {
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+    <div className="space-y-2 rounded-card border border-border bg-surface p-3">
       {children}
       <button type="button" onClick={onRemove} className="caption text-red-600 hover:underline">
         Remove entry
@@ -284,7 +284,7 @@ function BulletList({
       <button
         type="button"
         onClick={() => onChange([...bullets, ""])}
-        className="caption text-indigo-700 hover:underline"
+        className="caption text-accent hover:underline"
       >
         + Add bullet
       </button>

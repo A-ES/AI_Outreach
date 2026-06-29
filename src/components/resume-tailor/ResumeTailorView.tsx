@@ -6,6 +6,7 @@ import type { ResumeContent } from "@/lib/validation/resume";
 import { diffResumeContent } from "@/lib/utils/resume-diff";
 import { HallucinationWarnings } from "@/components/resume-tailor/HallucinationWarnings";
 import { ResumeDiffView } from "@/components/resume-tailor/ResumeDiffView";
+import { SequentialLoading } from "@/components/ui/SequentialLoading";
 
 interface TailorDraft {
   baseResumeId: string;
@@ -267,6 +268,16 @@ export function ResumeTailorView({ initialApplicationId = null }: ResumeTailorVi
         <button type="submit" disabled={submitting || !baseResumeId} className="btn-primary">
           {submitting ? "Tailoring…" : "Generate tailored draft"}
         </button>
+        {submitting && (
+          <SequentialLoading
+            steps={[
+              "Reading the target job description...",
+              "Reordering supported resume evidence...",
+              "Drafting the tailored version...",
+              "Checking for unsupported claims...",
+            ]}
+          />
+        )}
       </form>
 
       {draft && (
@@ -283,7 +294,7 @@ export function ResumeTailorView({ initialApplicationId = null }: ResumeTailorVi
 
           <section>
             <h2 className="section-heading mb-3">Base vs. tailored diff</h2>
-            <ResumeDiffView lines={diffLines} />
+            <ResumeDiffView lines={diffLines} flaggedClaims={draft.flaggedClaims} />
           </section>
 
           <section className="card space-y-4">

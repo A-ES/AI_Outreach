@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Application, ResumeMatchResult, Resume } from "@/lib/types";
 import { ResumeMatchResultView } from "@/components/resume-match/ResumeMatchResultView";
 import { MatchResultsHistory } from "@/components/resume-match/MatchResultsHistory";
+import { SequentialLoading } from "@/components/ui/SequentialLoading";
 
 interface ResumeMatchViewProps {
   initialApplicationId?: string | null;
@@ -201,6 +202,16 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
         <button type="submit" disabled={submitting} className="btn-primary">
           {submitting ? "Analyzing…" : "Run match analysis"}
         </button>
+        {submitting && (
+          <SequentialLoading
+            steps={[
+              "Analyzing job requirements...",
+              "Comparing against your resume...",
+              "Scoring keyword coverage...",
+              "Validating the structured result...",
+            ]}
+          />
+        )}
       </form>
 
       {displayedResult && <ResumeMatchResultView result={displayedResult} />}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Application, Contact, ContactStatus, ContactWithApplication } from "@/lib/types";
 import { CONTACT_STATUSES, CONTACT_STATUS_LABELS } from "@/lib/types";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const emptyForm = {
   name: "",
@@ -233,11 +234,21 @@ export function ContactsView() {
 
       {loading ? (
         <p className="body-text">Loading contacts…</p>
+      ) : contacts.length === 0 ? (
+        <EmptyState
+          title="No contacts yet"
+          description="Add recruiters, hiring managers, friends, and warm leads here, then connect them to applications when relevant."
+          action={
+            <button type="button" onClick={openCreate} className="btn-primary">
+              Add contact
+            </button>
+          }
+        />
       ) : (
         <div className="card overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-500">
+              <tr className="border-b border-border text-muted">
                 <th className="pb-3 pr-4 font-medium">Name</th>
                 <th className="pb-3 pr-4 font-medium">Company</th>
                 <th className="pb-3 pr-4 font-medium">Status</th>
@@ -247,7 +258,7 @@ export function ContactsView() {
             </thead>
             <tbody>
               {contacts.map((contact) => (
-                <tr key={contact.id} className="border-b border-slate-100">
+                <tr key={contact.id} className="border-b border-border/70">
                   <td className="py-3 pr-4 font-medium">{contact.name}</td>
                   <td className="py-3 pr-4">{contact.company_name ?? "—"}</td>
                   <td className="py-3 pr-4">
@@ -263,7 +274,7 @@ export function ContactsView() {
                       <button
                         type="button"
                         onClick={() => openEdit(contact)}
-                        className="text-indigo-700 hover:underline"
+                        className="text-accent hover:underline"
                       >
                         Edit
                       </button>
@@ -278,13 +289,6 @@ export function ContactsView() {
                   </td>
                 </tr>
               ))}
-              {contacts.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    No contacts yet.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

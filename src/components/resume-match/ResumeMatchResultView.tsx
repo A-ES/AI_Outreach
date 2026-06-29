@@ -13,9 +13,9 @@ export function ResumeMatchResultView({ result }: ResumeMatchResultViewProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="caption">Match score</p>
-          <p className="text-4xl font-semibold text-indigo-700">
+          <p className="text-4xl font-semibold text-accent">
             {result.match_score}
-            <span className="text-lg font-normal text-slate-400">/100</span>
+            <span className="text-lg font-normal text-muted">/100</span>
           </p>
         </div>
         <div className="text-right">
@@ -61,8 +61,8 @@ function KeywordList({
               key={kw}
               className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                 variant === "matched"
-                  ? "bg-emerald-50 text-emerald-800"
-                  : "bg-red-50 text-red-700"
+                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                  : "bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-200"
               }`}
             >
               {kw}

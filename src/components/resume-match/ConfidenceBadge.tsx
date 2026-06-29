@@ -26,13 +26,13 @@ export function ConfidenceBadge({ label, reason }: ConfidenceBadgeProps) {
         {config.label}
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-10 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-lg">
-          <p className="caption mb-1 font-medium text-slate-500">Why this confidence level</p>
+        <div className="absolute left-0 top-full z-10 mt-2 w-72 rounded-card border border-border bg-panel p-3 text-sm text-foreground shadow-lg dark:shadow-none">
+          <p className="caption mb-1 font-medium">Why this confidence level</p>
           <p>{reason || "No reason provided."}</p>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="caption mt-2 text-indigo-700 hover:underline"
+            className="caption mt-2 text-accent hover:underline"
           >
             Close
           </button>

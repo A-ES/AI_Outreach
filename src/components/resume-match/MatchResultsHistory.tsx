@@ -42,7 +42,14 @@ export function MatchResultsHistory({
   if (loading) return <p className="caption">Loading match history…</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (results.length === 0) {
-    return <p className="caption">No past match results for this application.</p>;
+    return (
+      <div className="empty-state py-6">
+        <h3 className="text-sm font-semibold text-foreground">No saved match results</h3>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          Run a match analysis for this application and the history will appear here.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -52,10 +59,10 @@ export function MatchResultsHistory({
           key={result.id}
           type="button"
           onClick={() => onSelectResult?.(result)}
-          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-indigo-200 hover:bg-indigo-50/50"
+          className="flex w-full items-center justify-between rounded-card border border-border bg-surface px-4 py-3 text-left text-sm transition hover:border-accent hover:bg-accent-soft"
         >
           <span>
-            <span className="font-medium text-indigo-700">{result.match_score}/100</span>
+            <span className="font-medium text-accent">{result.match_score}/100</span>
             <span className="caption ml-2 capitalize">{result.confidence_label} confidence</span>
           </span>
           <span className="caption">{formatDate(result.created_at.slice(0, 10))}</span>

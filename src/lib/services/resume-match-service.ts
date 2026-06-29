@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertResumeMatchResult } from "@/lib/db/resume-match-results";
 import { getResume, resumeContentToText } from "@/lib/db/resumes";
 import { createLLMClient } from "@/lib/llm/client";
+import type { LLMClient } from "@/lib/llm/client";
 import { DEEPSEEK_MODELS } from "@/lib/llm/types";
 import { loadPromptTemplate } from "@/lib/llm/prompt-loader";
 import type { ResumeMatchResult } from "@/lib/types";
@@ -29,6 +30,7 @@ interface ResumeMatchServiceDeps {
   applicationId?: string | null;
   /** Resolves resume text by ID from the resumes table, or pasted text when id is null. */
   resolveResumeText: (resumeId: string | null) => Promise<string>;
+  llmClient?: Pick<LLMClient, "generate">;
 }
 
 export async function resolveResumeTextFromDb(
@@ -51,12 +53,14 @@ export class ResumeMatchService {
   private userId: string;
   private applicationId: string | null;
   private resolveResumeText: (resumeId: string | null) => Promise<string>;
+  private llmClient?: Pick<LLMClient, "generate">;
 
   constructor(deps: ResumeMatchServiceDeps) {
     this.supabase = deps.supabase;
     this.userId = deps.userId;
     this.applicationId = deps.applicationId ?? null;
     this.resolveResumeText = deps.resolveResumeText;
+    this.llmClient = deps.llmClient;
   }
 
   /**
@@ -82,7 +86,7 @@ export class ResumeMatchService {
       resume_text: resumeText.trim(),
     });
 
-    const llmClient = createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
     const llmResult = await llmClient.generate({
       prompt,
       schema: resumeMatchOutputSchema,

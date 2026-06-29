@@ -26,7 +26,7 @@ export function HallucinationWarnings({ claims }: HallucinationWarningsProps) {
       </p>
       <ul className="mt-3 space-y-3">
         {claims.map((item, i) => (
-          <li key={i} className="rounded-md border border-red-200 bg-white px-3 py-2 text-sm">
+          <li key={i} className="rounded-md border border-red-200 bg-surface px-3 py-2 text-sm">
             <p className="font-medium text-red-900">&ldquo;{item.claim}&rdquo;</p>
             <p className="caption mt-1 text-red-700">{item.reason}</p>
           </li>

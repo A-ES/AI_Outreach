@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getResume } from "@/lib/db/resumes";
 import { createLLMClient } from "@/lib/llm/client";
+import type { LLMClient } from "@/lib/llm/client";
 import { DEEPSEEK_MODELS } from "@/lib/llm/types";
 import { loadPromptTemplate } from "@/lib/llm/prompt-loader";
 import type { FlaggedClaim } from "@/lib/types";
@@ -42,6 +43,7 @@ interface ResumeTailorServiceDeps {
   applicationId?: string | null;
   useFlashFallback?: boolean;
   thinkingMode?: boolean;
+  llmClient?: Pick<LLMClient, "generate">;
 }
 
 function getTailorConfig(deps: ResumeTailorServiceDeps) {
@@ -65,6 +67,7 @@ export class ResumeTailorService {
   private applicationId: string | null;
   private useFlashFallback: boolean;
   private thinkingMode: boolean;
+  private llmClient?: Pick<LLMClient, "generate">;
 
   constructor(deps: ResumeTailorServiceDeps) {
     this.supabase = deps.supabase;
@@ -72,6 +75,7 @@ export class ResumeTailorService {
     this.applicationId = deps.applicationId ?? null;
     this.useFlashFallback = deps.useFlashFallback ?? false;
     this.thinkingMode = deps.thinkingMode ?? false;
+    this.llmClient = deps.llmClient;
   }
 
   /**
@@ -98,7 +102,7 @@ export class ResumeTailorService {
       thinkingMode: this.thinkingMode,
     });
 
-    const llmClient = createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
 
     const tailorPrompt = loadPromptTemplate("resume_tailor.md", {
       job_description: jobDescriptionText.trim(),

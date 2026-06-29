@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test:llm": "tsx scripts/test-llm-validation.ts",
-    "test:resume-match-schema": "tsx scripts/test-resume-match-schema.ts"
+    "test:resume-match-schema": "tsx scripts/test-resume-match-schema.ts",
+    "test:outreach-state": "tsx scripts/test-outreach-state.ts",
+    "test": "node --import tsx scripts/run-tests.ts",
+    "eval:resume-match": "node --import tsx scripts/run-resume-match-evals.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

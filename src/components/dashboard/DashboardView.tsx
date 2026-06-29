@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { DashboardStats } from "@/lib/types";
 import { formatDate, getWeekStartDate } from "@/lib/utils/dates";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export function DashboardView() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -71,6 +72,10 @@ export function DashboardView() {
   }
 
   const goal = stats?.weeklyGoal;
+  const hasNoActivity =
+    (stats?.totalApplications ?? 0) === 0 &&
+    (stats?.totalInterviews ?? 0) === 0 &&
+    (stats?.totalOffers ?? 0) === 0;
 
   return (
     <div className="space-y-8">
@@ -97,6 +102,13 @@ export function DashboardView() {
           isText
         />
       </div>
+
+      {hasNoActivity && (
+        <EmptyState
+          title="Your workspace is ready"
+          description="Add an application or contact to start building a pipeline. The dashboard will fill in as your search gains shape."
+        />
+      )}
 
       <section className="card">
         <h2 className="section-heading mb-4">Weekly goals</h2>
@@ -160,9 +172,9 @@ function StatCard({
   isText?: boolean;
 }) {
   return (
-    <div className="card">
+      <div className="card">
       <p className="caption">{label}</p>
-      <p className={`mt-2 ${isText ? "text-lg font-medium" : "text-3xl font-semibold text-indigo-700"}`}>
+      <p className={`mt-2 ${isText ? "text-lg font-medium" : "text-3xl font-semibold text-accent"}`}>
         {value}
       </p>
     </div>
@@ -172,9 +184,9 @@ function StatCard({
 function ProgressBar({ actual, target }: { actual: number; target: number }) {
   const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
   return (
-    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className="mt-2 h-2 overflow-hidden rounded-full bg-panel-subtle">
       <div
-        className="h-full rounded-full bg-indigo-600 transition-all"
+        className="h-full rounded-full bg-accent transition-all"
         style={{ width: `${pct}%` }}
       />
     </div>

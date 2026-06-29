@@ -29,7 +29,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
           <div>
             <Link
               href="/applications"
-              className="caption text-indigo-700 hover:underline"
+              className="caption text-accent hover:underline"
             >
               ← Applications
             </Link>

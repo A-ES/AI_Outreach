@@ -6,6 +6,7 @@ import type { Application, ApplicationStatus } from "@/lib/types";
 import { APPLICATION_STATUSES, STATUS_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/utils/dates";
 import { KanbanBoard } from "@/components/applications/KanbanBoard";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type ViewMode = "list" | "board";
 
@@ -137,7 +138,7 @@ export function ApplicationsView() {
           <p className="caption mt-1">Track roles and pipeline stages</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+          <div className="inline-flex rounded-control border border-border bg-surface p-1">
             <ViewToggle active={view === "board"} onClick={() => setView("board")}>
               Board
             </ViewToggle>
@@ -242,6 +243,16 @@ export function ApplicationsView() {
 
       {loading ? (
         <p className="body-text">Loading applications…</p>
+      ) : applications.length === 0 ? (
+        <EmptyState
+          title="No applications tracked yet"
+          description="Create your first role to unlock the board, contacts, resume matching, and outreach history in one place."
+          action={
+            <button type="button" onClick={openCreate} className="btn-primary">
+              Add application
+            </button>
+          }
+        />
       ) : view === "board" ? (
         <KanbanBoard
           applications={applications}
@@ -252,7 +263,7 @@ export function ApplicationsView() {
         <div className="card overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-500">
+              <tr className="border-b border-border text-muted">
                 <th className="pb-3 pr-4 font-medium">Company</th>
                 <th className="pb-3 pr-4 font-medium">Role</th>
                 <th className="pb-3 pr-4 font-medium">Status</th>
@@ -262,7 +273,7 @@ export function ApplicationsView() {
             </thead>
             <tbody>
               {applications.map((app) => (
-                <tr key={app.id} className="border-b border-slate-100">
+                <tr key={app.id} className="border-b border-border/70">
                   <td className="py-3 pr-4 font-medium">{app.company_name}</td>
                   <td className="py-3 pr-4">{app.role_title}</td>
                   <td className="py-3 pr-4">{STATUS_LABELS[app.status]}</td>
@@ -271,14 +282,14 @@ export function ApplicationsView() {
                     <div className="flex gap-2">
                       <Link
                         href={`/applications/${app.id}`}
-                        className="text-indigo-700 hover:underline"
+                        className="text-accent hover:underline"
                       >
                         View
                       </Link>
                       <button
                         type="button"
                         onClick={() => openEdit(app)}
-                        className="text-indigo-700 hover:underline"
+                        className="text-accent hover:underline"
                       >
                         Edit
                       </button>
@@ -293,13 +304,6 @@ export function ApplicationsView() {
                   </td>
                 </tr>
               ))}
-              {applications.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    No applications yet. Add your first one above.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -322,7 +326,7 @@ function ViewToggle({
       type="button"
       onClick={onClick}
       className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-        active ? "bg-indigo-700 text-white" : "text-slate-600 hover:text-slate-900"
+        active ? "bg-accent text-white dark:text-slate-950" : "text-muted hover:text-foreground"
       }`}
     >
       {children}
