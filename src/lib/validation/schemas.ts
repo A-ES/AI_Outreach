@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { APPLICATION_STATUSES, CONTACT_STATUSES } from "@/lib/types";
+import { APPLICATION_STATUSES, APPLICATION_PLATFORMS, FOLLOWUP_STATUSES, CONTACT_STATUSES } from "@/lib/types";
 
 export const applicationCreateSchema = z.object({
   company_name: z.string().min(1, "Company name is required"),
   role_title: z.string().min(1, "Role title is required"),
+  platform: z.enum(APPLICATION_PLATFORMS).optional().nullable(),
+  application_url: z.string().optional().nullable(),
+  contact_id: z.string().uuid().optional().nullable(),
   job_description_text: z.string().optional().nullable(),
+  followup_status: z.enum(FOLLOWUP_STATUSES).optional().nullable(),
   status: z.enum(APPLICATION_STATUSES).optional(),
   date_applied: z
     .string()

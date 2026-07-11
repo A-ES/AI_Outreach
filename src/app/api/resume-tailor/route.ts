@@ -4,8 +4,7 @@ import { createResumeTailorService } from "@/lib/services/resume-tailor-service"
 import { resumeTailorRequestSchema } from "@/lib/validation/resume";
 
 export async function POST(request: NextRequest) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
     const body = await request.json();
@@ -15,8 +14,8 @@ export async function POST(request: NextRequest) {
     }
 
     const service = createResumeTailorService({
-      supabase,
-      userId: user!.id,
+      db,
+      userId: user.id,
       applicationId: parsed.data.applicationId ?? null,
       useFlashFallback: parsed.data.useFlashFallback,
       thinkingMode: parsed.data.thinkingMode,
@@ -58,9 +57,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (e) {
-    return jsonError(
-      e instanceof Error ? e.message : "Failed to tailor resume",
-      500
-    );
+    return jsonError(e instanceof Error ? e.message : "Failed to tailor resume", 500);
   }
 }

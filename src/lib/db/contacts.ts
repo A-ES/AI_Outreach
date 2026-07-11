@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import type { Contact, ContactWithApplication } from "@/lib/types";
 import type {
   ContactCreateInput,
@@ -10,108 +11,105 @@ function emptyToNull(value: string | null | undefined): string | null {
   return value === "" ? null : value;
 }
 
-export async function listContacts(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<ContactWithApplication[]> {
-  const { data, error } = await supabase
-    .from("contacts")
-    .select("*, applications(company_name, role_title)")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as ContactWithApplication[];
+function now() {
+  return new Date().toISOString();
 }
 
-export async function getContact(
-  supabase: SupabaseClient,
+export function listContacts(
+  db: Database.Database,
+  userId: string
+): ContactWithApplication[] {
+  const rows = db
+    .prepare(
+      `SELECT c.*, a.company_name AS app_company_name, a.role_title AS app_role_title
+       FROM contacts c
+       LEFT JOIN applications a ON c.application_id = a.id
+       WHERE c.user_id = ?
+       ORDER BY c.updated_at DESC`
+    )
+    .all(userId) as Array<Contact & { app_company_name: string | null; app_role_title: string | null }>;
+
+  return rows.map((row) => ({
+    ...row,
+    applications: row.app_company_name
+      ? { company_name: row.app_company_name, role_title: row.app_role_title! }
+      : null,
+    app_company_name: undefined,
+    app_role_title: undefined,
+  })) as unknown as ContactWithApplication[];
+}
+
+export function getContact(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<Contact | null> {
-  const { data, error } = await supabase
-    .from("contacts")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data as Contact | null;
+): Contact | null {
+  return (
+    (db
+      .prepare("SELECT * FROM contacts WHERE id = ? AND user_id = ?")
+      .get(id, userId) as Contact | undefined) ?? null
+  );
 }
 
-export async function createContact(
-  supabase: SupabaseClient,
+export function createContact(
+  db: Database.Database,
   userId: string,
   input: ContactCreateInput
-): Promise<Contact> {
-  const payload = {
-    user_id: userId,
-    name: input.name,
-    company_name: emptyToNull(input.company_name ?? null),
-    role_title: emptyToNull(input.role_title ?? null),
-    email: emptyToNull(input.email ?? null),
-    linkedin_url: emptyToNull(input.linkedin_url ?? null),
-    status: input.status ?? "not_contacted",
-    application_id: input.application_id ?? null,
-  };
+): Contact {
+  const id = uuidv4();
+  const timestamp = now();
 
-  const { data, error } = await supabase
-    .from("contacts")
-    .insert(payload)
-    .select()
-    .single();
+  db.prepare(
+    `INSERT INTO contacts (id, user_id, application_id, name, company_name, role_title, email, linkedin_url, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    userId,
+    input.application_id ?? null,
+    input.name,
+    emptyToNull(input.company_name ?? null),
+    emptyToNull(input.role_title ?? null),
+    emptyToNull(input.email ?? null),
+    emptyToNull(input.linkedin_url ?? null),
+    input.status ?? "not_contacted",
+    timestamp,
+    timestamp
+  );
 
-  if (error) throw new Error(error.message);
-  return data as Contact;
+  return getContact(db, userId, id)!;
 }
 
-export async function updateContact(
-  supabase: SupabaseClient,
+export function updateContact(
+  db: Database.Database,
   userId: string,
   id: string,
   input: ContactUpdateInput
-): Promise<Contact> {
-  const payload: Record<string, unknown> = {};
+): Contact {
+  const updates: string[] = [];
+  const values: unknown[] = [];
 
-  if (input.name !== undefined) payload.name = input.name;
-  if (input.company_name !== undefined) {
-    payload.company_name = emptyToNull(input.company_name);
-  }
-  if (input.role_title !== undefined) {
-    payload.role_title = emptyToNull(input.role_title);
-  }
-  if (input.email !== undefined) payload.email = emptyToNull(input.email);
-  if (input.linkedin_url !== undefined) {
-    payload.linkedin_url = emptyToNull(input.linkedin_url);
-  }
-  if (input.status !== undefined) payload.status = input.status;
-  if (input.application_id !== undefined) {
-    payload.application_id = input.application_id;
+  if (input.name !== undefined) { updates.push("name = ?"); values.push(input.name); }
+  if (input.company_name !== undefined) { updates.push("company_name = ?"); values.push(emptyToNull(input.company_name)); }
+  if (input.role_title !== undefined) { updates.push("role_title = ?"); values.push(emptyToNull(input.role_title)); }
+  if (input.email !== undefined) { updates.push("email = ?"); values.push(emptyToNull(input.email)); }
+  if (input.linkedin_url !== undefined) { updates.push("linkedin_url = ?"); values.push(emptyToNull(input.linkedin_url)); }
+  if (input.status !== undefined) { updates.push("status = ?"); values.push(input.status); }
+  if (input.application_id !== undefined) { updates.push("application_id = ?"); values.push(input.application_id); }
+
+  if (updates.length > 0) {
+    updates.push("updated_at = ?");
+    values.push(now());
+    values.push(id, userId);
+    db.prepare(`UPDATE contacts SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...values);
   }
 
-  const { data, error } = await supabase
-    .from("contacts")
-    .update(payload)
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as Contact;
+  return getContact(db, userId, id)!;
 }
 
-export async function deleteContact(
-  supabase: SupabaseClient,
+export function deleteContact(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<void> {
-  const { error } = await supabase
-    .from("contacts")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
+): void {
+  db.prepare("DELETE FROM contacts WHERE id = ? AND user_id = ?").run(id, userId);
 }

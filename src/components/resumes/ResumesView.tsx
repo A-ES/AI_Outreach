@@ -16,6 +16,7 @@ export function ResumesView() {
   const [versionLabel, setVersionLabel] = useState("Base resume");
   const [content, setContent] = useState<ResumeContent>(emptyResumeContent());
   const [submitting, setSubmitting] = useState(false);
+  const [parsingPdf, setParsingPdf] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load() {
@@ -94,6 +95,28 @@ export function ResumesView() {
     }
   }
 
+  async function handlePdfUpload(file: File | null) {
+    if (!file) return;
+    setParsingPdf(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/resumes/parse-pdf", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to parse PDF");
+      setContent(data.content);
+      if (!editingId) setVersionLabel(file.name.replace(/\.pdf$/i, "") || "Parsed resume");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to parse PDF");
+    } finally {
+      setParsingPdf(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -116,6 +139,21 @@ export function ResumesView() {
         <h2 className="section-heading">
           {editingId ? "Edit resume" : "Create base resume"}
         </h2>
+        <div className="rounded-card border border-border bg-panel-subtle p-4">
+          <label className="caption mb-1 block font-medium">
+            Upload resume PDF
+          </label>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => handlePdfUpload(e.target.files?.[0] ?? null)}
+            className="input-field"
+          />
+          <p className="caption mt-2">
+            The PDF will be parsed into structured sections below. Review and edit before saving.
+          </p>
+          {parsingPdf && <p className="caption mt-2 text-accent">Parsing PDF...</p>}
+        </div>
         <div>
           <label className="caption mb-1 block font-medium">Version label</label>
           <input

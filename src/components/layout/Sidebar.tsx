@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
 import { DarkModeToggle } from "@/components/layout/DarkModeToggle";
 
 const navItems = [
@@ -11,22 +10,14 @@ const navItems = [
   { href: "/resumes", label: "Resumes" },
   { href: "/resume-tailor", label: "Resume Tailor" },
   { href: "/resume-match", label: "Resume Match" },
+  { href: "/ats-check", label: "ATS Check" },
   { href: "/outreach", label: "Outreach" },
   { href: "/analytics", label: "Analytics" },
-  { href: "/ai-evaluation", label: "AI Evaluation" },
   { href: "/contacts", label: "Contacts" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border bg-surface md:w-64">
@@ -60,13 +51,6 @@ export function Sidebar() {
 
       <div className="space-y-3 border-t border-border p-4">
         <DarkModeToggle />
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="btn-secondary w-full"
-        >
-          Log out
-        </button>
       </div>
     </aside>
   );

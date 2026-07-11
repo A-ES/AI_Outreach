@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import type {
   AiEvaluationMetrics,
   EvalRunResult,
@@ -10,68 +11,76 @@ const DEEPSEEK_PRICING_PER_MILLION = {
   "deepseek-v4-pro": { input: 0.55, output: 2.19 },
 };
 
-export async function listEvalTestCases(
-  supabase: SupabaseClient
-): Promise<EvalTestCase[]> {
-  const { data, error } = await supabase
-    .from("eval_test_cases")
-    .select("*")
-    .order("created_at", { ascending: true });
+export function listEvalTestCases(db: Database.Database): EvalTestCase[] {
+  const rows = db
+    .prepare("SELECT * FROM eval_test_cases ORDER BY created_at ASC")
+    .all() as Record<string, unknown>[];
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as EvalTestCase[];
+  return rows.map((row) => ({
+    ...row,
+    expected_keywords: JSON.parse(row.expected_keywords as string),
+    expected_missing_skills: JSON.parse(row.expected_missing_skills as string),
+  })) as EvalTestCase[];
 }
 
-export async function insertEvalRunResult(
-  supabase: SupabaseClient,
+export function insertEvalRunResult(
+  db: Database.Database,
   input: Omit<EvalRunResult, "id">
-): Promise<EvalRunResult> {
-  const { data, error } = await supabase
-    .from("eval_run_results")
-    .insert(input)
-    .select()
-    .single();
+): EvalRunResult {
+  const id = uuidv4();
 
-  if (error) throw new Error(error.message);
-  return data as EvalRunResult;
+  db.prepare(
+    `INSERT INTO eval_run_results (id, eval_test_case_id, run_timestamp, actual_match_score, keyword_precision, keyword_recall, passed, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    input.eval_test_case_id,
+    input.run_timestamp,
+    input.actual_match_score,
+    input.keyword_precision,
+    input.keyword_recall,
+    input.passed ? 1 : 0,
+    input.notes ?? null
+  );
+
+  const row = db.prepare("SELECT * FROM eval_run_results WHERE id = ?").get(id) as Record<string, unknown>;
+  return { ...row, passed: Boolean(row.passed) } as EvalRunResult;
 }
 
-export async function getAiEvaluationMetrics(
-  supabase: SupabaseClient
-): Promise<AiEvaluationMetrics> {
-  const [{ data: evalRows, error: evalError }, { data: logs, error: logsError }] =
-    await Promise.all([
-      supabase
-        .from("eval_run_results")
-        .select("*")
-        .order("run_timestamp", { ascending: false }),
-      supabase
-        .from("ai_call_logs")
-        .select(
-          "feature_name, model_name, input_tokens, output_tokens, latency_ms, confidence_score, validation_passed, raw_response_json"
-        ),
-    ]);
+export function getAiEvaluationMetrics(db: Database.Database): AiEvaluationMetrics {
+  const evalRows = db
+    .prepare("SELECT * FROM eval_run_results ORDER BY run_timestamp DESC")
+    .all() as Record<string, unknown>[];
 
-  if (evalError) throw new Error(evalError.message);
-  if (logsError) throw new Error(logsError.message);
+  const results = evalRows.map((row) => ({
+    ...row,
+    passed: Boolean(row.passed),
+  })) as EvalRunResult[];
 
-  const results = (evalRows ?? []) as EvalRunResult[];
-  const latestRunTimestamp = results[0]?.run_timestamp ?? null;
+  const logs = db
+    .prepare(
+      "SELECT feature_name, model_name, input_tokens, output_tokens, latency_ms, confidence_score, validation_passed, raw_response_json FROM ai_call_logs"
+    )
+    .all() as Array<Record<string, unknown>>;
+
+  const latestRunTimestamp = (results[0]?.run_timestamp as string) ?? null;
   const latestResults = latestRunTimestamp
-    ? results.filter((result) => result.run_timestamp === latestRunTimestamp)
+    ? results.filter((r) => r.run_timestamp === latestRunTimestamp)
     : [];
-  const passedCount = latestResults.filter((result) => result.passed).length;
+  const passedCount = latestResults.filter((r) => r.passed).length;
 
-  const aiLogs = (logs ?? []) as Array<{
-    feature_name: string;
-    model_name: string;
-    input_tokens: number;
-    output_tokens: number;
-    latency_ms: number;
-    confidence_score: number | null;
-    validation_passed: boolean;
-    raw_response_json: unknown;
-  }>;
+  const aiLogs = logs.map((log) => ({
+    feature_name: log.feature_name as string,
+    model_name: log.model_name as string,
+    input_tokens: log.input_tokens as number,
+    output_tokens: log.output_tokens as number,
+    latency_ms: log.latency_ms as number,
+    confidence_score: log.confidence_score as number | null,
+    validation_passed: Boolean(log.validation_passed),
+    raw_response_json: log.raw_response_json
+      ? JSON.parse(log.raw_response_json as string)
+      : null,
+  }));
 
   const confidenceValues = aiLogs
     .map((log) => log.confidence_score)
@@ -86,12 +95,8 @@ export async function getAiEvaluationMetrics(
     eval_case_count: latestResults.length,
     resume_match_accuracy:
       latestResults.length > 0 ? (passedCount / latestResults.length) * 100 : 0,
-    average_keyword_precision: average(
-      latestResults.map((result) => result.keyword_precision)
-    ),
-    average_keyword_recall: average(
-      latestResults.map((result) => result.keyword_recall)
-    ),
+    average_keyword_precision: average(latestResults.map((r) => r.keyword_precision)),
+    average_keyword_recall: average(latestResults.map((r) => r.keyword_recall)),
     tailoring_hallucinations_detected: hallucinationLogs.reduce(
       (sum, log) => sum + countFlaggedClaims(log.raw_response_json),
       0
@@ -100,13 +105,13 @@ export async function getAiEvaluationMetrics(
     average_cost_per_request: average(aiLogs.map(estimateLogCost)),
     average_confidence_score:
       confidenceValues.length > 0 ? average(confidenceValues) : null,
-    total_eval_runs: new Set(results.map((result) => result.run_timestamp)).size,
+    total_eval_runs: new Set(results.map((r) => r.run_timestamp)).size,
   };
 }
 
 function average(values: number[]): number {
   if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
 function estimateLogCost(log: { model_name: string; input_tokens: number; output_tokens: number }) {
@@ -143,7 +148,6 @@ function countFlaggedClaims(rawResponse: unknown): number {
 
 function extractMessageContent(rawResponse: unknown): string | null {
   if (typeof rawResponse !== "object" || rawResponse === null) return null;
-  const choices = (rawResponse as { choices?: Array<{ message?: { content?: string } }> })
-    .choices;
+  const choices = (rawResponse as { choices?: Array<{ message?: { content?: string } }> }).choices;
   return choices?.[0]?.message?.content ?? null;
 }

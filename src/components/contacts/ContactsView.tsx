@@ -5,6 +5,26 @@ import type { Application, Contact, ContactStatus, ContactWithApplication } from
 import { CONTACT_STATUSES, CONTACT_STATUS_LABELS } from "@/lib/types";
 import { EmptyState } from "@/components/ui/EmptyState";
 
+interface ImportPreviewRow {
+  row_number: number;
+  input: {
+    name: string;
+    company_name: string | null;
+    role_title: string | null;
+    email: string | null;
+    linkedin_url: string | null;
+  };
+  status: "ready" | "duplicate" | "invalid";
+  errors: string[];
+}
+
+interface ImportSummary {
+  succeeded: number;
+  failed: number;
+  skipped_duplicates: number;
+  ready: number;
+}
+
 const emptyForm = {
   name: "",
   company_name: "",
@@ -24,6 +44,10 @@ export function ContactsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  const [importPreview, setImportPreview] = useState<ImportPreviewRow[]>([]);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [importing, setImporting] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -117,6 +141,47 @@ export function ContactsView() {
       await loadData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete contact");
+    }
+  }
+
+  async function previewImport() {
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/contacts/bulk-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText, commit: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to preview import");
+      setImportPreview(data.preview);
+      setImportSummary(data.summary);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to preview import");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function commitImport() {
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/contacts/bulk-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText, commit: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to import contacts");
+      setImportPreview(data.preview);
+      setImportSummary(data.summary);
+      await loadData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to import contacts");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -232,6 +297,93 @@ export function ContactsView() {
         </section>
       )}
 
+      <section className="card space-y-4">
+        <div>
+          <h2 className="section-heading">CSV bulk import</h2>
+          <p className="caption mt-1">
+            Import your own vetted contacts. This only creates contact records; sending remains one-at-a-time through the outreach review queue.
+          </p>
+        </div>
+        <textarea
+          rows={5}
+          value={csvText}
+          onChange={(e) => {
+            setCsvText(e.target.value);
+            setImportPreview([]);
+            setImportSummary(null);
+          }}
+          className="input-field font-mono text-xs"
+          placeholder="name,company,role,email,LinkedIn URL&#10;Jane Doe,Acme,Engineering Manager,jane@example.com,https://linkedin.com/in/jane"
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={previewImport}
+            disabled={importing || !csvText.trim()}
+            className="btn-secondary"
+          >
+            {importing ? "Checking..." : "Preview import"}
+          </button>
+          <button
+            type="button"
+            onClick={commitImport}
+            disabled={
+              importing ||
+              !importSummary ||
+              importSummary.ready === 0 ||
+              importSummary.succeeded > 0
+            }
+            className="btn-primary"
+          >
+            Import ready contacts
+          </button>
+        </div>
+        {importSummary && (
+          <div className="grid gap-3 sm:grid-cols-4">
+            <ImportMetric label="Ready" value={importSummary.ready} />
+            <ImportMetric label="Succeeded" value={importSummary.succeeded} />
+            <ImportMetric label="Failed" value={importSummary.failed} />
+            <ImportMetric
+              label="Skipped duplicates"
+              value={importSummary.skipped_duplicates}
+            />
+          </div>
+        )}
+        {importPreview.length > 0 && (
+          <div className="overflow-x-auto rounded-card border border-border">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-panel-subtle text-muted">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Row</th>
+                  <th className="px-3 py-2 font-medium">Name</th>
+                  <th className="px-3 py-2 font-medium">Company</th>
+                  <th className="px-3 py-2 font-medium">Email</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreview.map((row) => (
+                  <tr key={row.row_number} className="border-t border-border">
+                    <td className="px-3 py-2">{row.row_number}</td>
+                    <td className="px-3 py-2">{row.input.name || "—"}</td>
+                    <td className="px-3 py-2">{row.input.company_name || "—"}</td>
+                    <td className="px-3 py-2">{row.input.email || "—"}</td>
+                    <td className="px-3 py-2">
+                      <span className={importStatusClass(row.status)}>
+                        {row.status}
+                      </span>
+                      {row.errors.length > 0 && (
+                        <p className="caption mt-1">{row.errors.join(" ")}</p>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {loading ? (
         <p className="body-text">Loading contacts…</p>
       ) : contacts.length === 0 ? (
@@ -295,6 +447,26 @@ export function ContactsView() {
       )}
     </div>
   );
+}
+
+function ImportMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-card border border-border bg-panel-subtle p-3">
+      <p className="caption">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function importStatusClass(status: ImportPreviewRow["status"]) {
+  const base = "status-pill capitalize";
+  if (status === "ready") {
+    return `${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200`;
+  }
+  if (status === "duplicate") {
+    return `${base} bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100`;
+  }
+  return `${base} bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200`;
 }
 
 function Field({

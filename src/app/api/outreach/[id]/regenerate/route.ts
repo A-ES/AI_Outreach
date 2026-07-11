@@ -13,8 +13,7 @@ import {
 type RouteContext = { params: { id: string } };
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
     const body = await request.json();
@@ -23,17 +22,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return jsonError(parsed.error.issues[0]?.message ?? "Invalid input");
     }
 
-    const existing = await getOutreachEmail(
-      supabase,
-      user!.id,
-      context.params.id
-    );
+    const existing = getOutreachEmail(db, user.id, context.params.id);
     if (!existing) return jsonError("Outreach email not found", 404);
     assertCanRegenerate(existing.status);
 
     const service = createOutreachDraftService({
-      supabase,
-      userId: user!.id,
+      db,
+      userId: user.id,
       regenerationNote: parsed.data.note,
     });
 
@@ -50,12 +45,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const email = await updateOutreachFromRegeneration(
-      supabase,
-      user!.id,
-      context.params.id,
-      { subject: result.subject, body: result.body }
-    );
+    const email = updateOutreachFromRegeneration(db, user.id, context.params.id, {
+      subject: result.subject,
+      body: result.body,
+    });
 
     return jsonData({ status: "success", email, logId: result.logId });
   } catch (e) {

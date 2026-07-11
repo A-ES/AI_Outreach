@@ -19,12 +19,44 @@ export const CONTACT_STATUSES = [
 
 export type ContactStatus = (typeof CONTACT_STATUSES)[number];
 
+export const APPLICATION_PLATFORMS = [
+  "LinkedIn",
+  "Wellfound",
+  "Company Site",
+  "Referral",
+  "Naukri",
+  "Internshala",
+  "Other",
+] as const;
+
+export type ApplicationPlatform = (typeof APPLICATION_PLATFORMS)[number];
+
+export const FOLLOWUP_STATUSES = [
+  "no_response",
+  "followed_up_once",
+  "followed_up_twice",
+  "ghosted",
+] as const;
+
+export type FollowupStatus = (typeof FOLLOWUP_STATUSES)[number];
+
+export const FOLLOWUP_STATUS_LABELS: Record<FollowupStatus, string> = {
+  no_response: "No response yet",
+  followed_up_once: "Followed up once",
+  followed_up_twice: "Followed up twice",
+  ghosted: "Ghosted (30+ days)",
+};
+
 export interface Application {
   id: string;
   user_id: string;
   company_name: string;
   role_title: string;
+  platform: ApplicationPlatform | null;
+  application_url: string | null;
+  contact_id: string | null;
   job_description_text: string | null;
+  followup_status: FollowupStatus | null;
   status: ApplicationStatus;
   date_applied: string | null;
   date_status_changed: string | null;
@@ -65,6 +97,7 @@ export interface DashboardStats {
   totalApplications: number;
   totalInterviews: number;
   totalOffers: number;
+  followUpsDue: number;
   weeklyGoal: WeeklyGoal | null;
 }
 
@@ -265,4 +298,13 @@ export interface AiEvaluationMetrics {
   average_cost_per_request: number;
   average_confidence_score: number | null;
   total_eval_runs: number;
+}
+
+export interface AtsCheckResultRecord {
+  id: string;
+  user_id: string;
+  resume_id: string | null;
+  overall_pass: boolean;
+  checks: import("@/lib/validation/ats").AtsCheckItem[];
+  created_at: string;
 }

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import { insertResumeMatchResult } from "@/lib/db/resume-match-results";
 import { getResume, resumeContentToText } from "@/lib/db/resumes";
 import { createLLMClient } from "@/lib/llm/client";
@@ -25,7 +25,7 @@ export type ResumeMatchAnalyzeNeedsReview = {
 export type MatchResult = ResumeMatchAnalyzeSuccess | ResumeMatchAnalyzeNeedsReview;
 
 interface ResumeMatchServiceDeps {
-  supabase: SupabaseClient;
+  db: Database.Database;
   userId: string;
   applicationId?: string | null;
   /** Resolves resume text by ID from the resumes table, or pasted text when id is null. */
@@ -34,13 +34,13 @@ interface ResumeMatchServiceDeps {
 }
 
 export async function resolveResumeTextFromDb(
-  supabase: SupabaseClient,
+  db: Database.Database,
   userId: string,
   resumeId: string | null,
   pastedText?: string
 ): Promise<string> {
   if (resumeId) {
-    const resume = await getResume(supabase, userId, resumeId);
+    const resume = getResume(db, userId, resumeId);
     if (!resume) throw new Error("Resume not found");
     return resumeContentToText(resume.content_json);
   }
@@ -49,14 +49,14 @@ export async function resolveResumeTextFromDb(
 }
 
 export class ResumeMatchService {
-  private supabase: SupabaseClient;
+  private db: Database.Database;
   private userId: string;
   private applicationId: string | null;
   private resolveResumeText: (resumeId: string | null) => Promise<string>;
   private llmClient?: Pick<LLMClient, "generate">;
 
   constructor(deps: ResumeMatchServiceDeps) {
-    this.supabase = deps.supabase;
+    this.db = deps.db;
     this.userId = deps.userId;
     this.applicationId = deps.applicationId ?? null;
     this.resolveResumeText = deps.resolveResumeText;
@@ -86,7 +86,7 @@ export class ResumeMatchService {
       resume_text: resumeText.trim(),
     });
 
-    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.db);
     const llmResult = await llmClient.generate({
       prompt,
       schema: resumeMatchOutputSchema,
@@ -105,7 +105,7 @@ export class ResumeMatchService {
       };
     }
 
-    const saved = await insertResumeMatchResult(this.supabase, {
+    const saved = insertResumeMatchResult(this.db, {
       user_id: this.userId,
       application_id: this.applicationId,
       resume_id: resumeId,

@@ -1,32 +1,57 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import type { AiCallLog, AiCallLogInsert } from "@/lib/llm/types";
 
-export async function insertAiCallLog(
-  supabase: SupabaseClient,
+export function insertAiCallLog(
+  db: Database.Database,
   log: AiCallLogInsert
-): Promise<AiCallLog> {
-  const { data, error } = await supabase
-    .from("ai_call_logs")
-    .insert(log)
-    .select()
-    .single();
+): AiCallLog {
+  const id = uuidv4();
+  const timestamp = new Date().toISOString();
 
-  if (error) throw new Error(error.message);
-  return data as AiCallLog;
+  db.prepare(
+    `INSERT INTO ai_call_logs (id, user_id, feature_name, prompt_text, model_name, temperature, input_tokens, output_tokens, latency_ms, confidence_score, validation_passed, validation_retry_count, raw_response_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    log.user_id,
+    log.feature_name,
+    log.prompt_text,
+    log.model_name,
+    log.temperature ?? null,
+    log.input_tokens ?? 0,
+    log.output_tokens ?? 0,
+    log.latency_ms ?? 0,
+    log.confidence_score ?? null,
+    log.validation_passed ? 1 : 0,
+    log.validation_retry_count ?? 0,
+    log.raw_response_json ? JSON.stringify(log.raw_response_json) : null,
+    timestamp
+  );
+
+  return {
+    id,
+    ...log,
+    created_at: timestamp,
+  } as AiCallLog;
 }
 
-export async function listAiCallLogs(
-  supabase: SupabaseClient,
+export function listAiCallLogs(
+  db: Database.Database,
   userId: string,
   limit = 50
-): Promise<AiCallLog[]> {
-  const { data, error } = await supabase
-    .from("ai_call_logs")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+): AiCallLog[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM ai_call_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?"
+    )
+    .all(userId, limit) as Array<Record<string, unknown>>;
 
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AiCallLog[];
+  return rows.map((row) => ({
+    ...row,
+    validation_passed: Boolean(row.validation_passed),
+    raw_response_json: row.raw_response_json
+      ? JSON.parse(row.raw_response_json as string)
+      : null,
+  })) as AiCallLog[];
 }

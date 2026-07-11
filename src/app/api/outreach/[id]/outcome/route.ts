@@ -6,8 +6,7 @@ import { outreachOutcomeSchema } from "@/lib/validation/outreach";
 type RouteContext = { params: { id: string } };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
     const body = await request.json();
@@ -16,12 +15,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return jsonError(parsed.error.issues[0]?.message ?? "Invalid input");
     }
 
-    const email = await updateOutreachOutcome(
-      supabase,
-      user!.id,
-      context.params.id,
-      parsed.data
-    );
+    const email = updateOutreachOutcome(db, user.id, context.params.id, parsed.data);
     return jsonData({ email });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update outcome";

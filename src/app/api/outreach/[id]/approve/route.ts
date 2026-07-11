@@ -5,15 +5,10 @@ import { approveOutreachEmail } from "@/lib/db/outreach-emails";
 type RouteContext = { params: { id: string } };
 
 export async function POST(_request: NextRequest, context: RouteContext) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
-    const email = await approveOutreachEmail(
-      supabase,
-      user!.id,
-      context.params.id
-    );
+    const email = approveOutreachEmail(db, user.id, context.params.id);
     return jsonData({ email });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to approve";

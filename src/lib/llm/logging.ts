@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import type { AiCallLogInsert } from "@/lib/llm/types";
 import { insertAiCallLog } from "@/lib/db/ai-call-logs";
 
@@ -17,8 +17,8 @@ export interface GenerationLogPayload {
 }
 
 /** Persists one row per LLMClient.generate() invocation with full metadata. */
-export async function logLLMGeneration(
-  supabase: SupabaseClient,
+export function logLLMGeneration(
+  db: Database.Database,
   payload: GenerationLogPayload
 ) {
   const logEntry: AiCallLogInsert = {
@@ -39,5 +39,5 @@ export async function logLLMGeneration(
         : { attempts: payload.rawResponses },
   };
 
-  return insertAiCallLog(supabase, logEntry);
+  return insertAiCallLog(db, logEntry);
 }

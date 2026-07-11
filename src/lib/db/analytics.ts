@@ -1,10 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import type {
   AnalyticsEmailLengthBucket,
   AnalyticsRateBucket,
   OutcomeAnalyticsStats,
-  OutreachEmail,
-  Resume,
 } from "@/lib/types";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -19,10 +17,14 @@ const EMAIL_LENGTH_BUCKETS: Array<{
   { label: "Long (181+ words)", min: 181, max: Number.POSITIVE_INFINITY },
 ];
 
-type SentOutcomeRow = Pick<
-  OutreachEmail,
-  "id" | "application_id" | "body" | "date_sent" | "reply_received" | "outcome"
->;
+interface SentOutcomeRow {
+  id: string;
+  application_id: string | null;
+  body: string;
+  date_sent: string | null;
+  reply_received: number;
+  outcome: string | null;
+}
 
 function emptyRateBucket(label: string): AnalyticsRateBucket {
   return { label, sent_count: 0, reply_count: 0, reply_rate: 0 };
@@ -34,8 +36,7 @@ function toReplyRate(sentCount: number, replyCount: number): number {
 }
 
 function wordCount(text: string): number {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  return words.length;
+  return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
 function addToBucket(bucket: AnalyticsRateBucket, replied: boolean) {
@@ -47,44 +48,43 @@ function addToBucket(bucket: AnalyticsRateBucket, replied: boolean) {
 function bucketByEmailLength(body: string): AnalyticsEmailLengthBucket {
   const count = wordCount(body);
   return (
-    EMAIL_LENGTH_BUCKETS.find((bucket) => count >= bucket.min && count <= bucket.max)
-      ?.label ?? "Long (181+ words)"
+    EMAIL_LENGTH_BUCKETS.find((b) => count >= b.min && count <= b.max)?.label ??
+    "Long (181+ words)"
   );
 }
 
-export async function getOutcomeAnalyticsStats(
-  supabase: SupabaseClient,
+export function getOutcomeAnalyticsStats(
+  db: Database.Database,
   userId: string
-): Promise<OutcomeAnalyticsStats> {
-  const { data: outcomes, error: outcomesError } = await supabase
-    .from("outreach_emails")
-    .select("id, application_id, body, date_sent, reply_received, outcome")
-    .eq("user_id", userId)
-    .eq("status", "sent")
-    .not("outcome", "is", null)
-    .order("date_sent", { ascending: true });
+): OutcomeAnalyticsStats {
+  const rows = db
+    .prepare(
+      `SELECT id, application_id, body, date_sent, reply_received, outcome
+       FROM outreach_emails
+       WHERE user_id = ? AND status = 'sent' AND outcome IS NOT NULL
+       ORDER BY date_sent ASC`
+    )
+    .all(userId) as SentOutcomeRow[];
 
-  if (outcomesError) throw new Error(outcomesError.message);
-
-  const { data: resumes, error: resumesError } = await supabase
-    .from("resumes")
-    .select("id, version_label, is_base_resume, tailored_for_application_id, created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (resumesError) throw new Error(resumesError.message);
-
-  const rows = (outcomes ?? []) as SentOutcomeRow[];
-  const resumeRows = (resumes ?? []) as Array<
-    Pick<
-      Resume,
-      "id" | "version_label" | "is_base_resume" | "tailored_for_application_id" | "created_at"
-    >
-  >;
+  const resumes = db
+    .prepare(
+      `SELECT id, version_label, is_base_resume, tailored_for_application_id, created_at
+       FROM resumes WHERE user_id = ? ORDER BY created_at DESC`
+    )
+    .all(userId) as Array<{
+    id: string;
+    version_label: string;
+    is_base_resume: number;
+    tailored_for_application_id: string | null;
+    created_at: string;
+  }>;
 
   const latestResumeByApplication = new Map<string, string>();
-  for (const resume of resumeRows) {
-    if (resume.tailored_for_application_id && !latestResumeByApplication.has(resume.tailored_for_application_id)) {
+  for (const resume of resumes) {
+    if (
+      resume.tailored_for_application_id &&
+      !latestResumeByApplication.has(resume.tailored_for_application_id)
+    ) {
       latestResumeByApplication.set(
         resume.tailored_for_application_id,
         resume.version_label
@@ -92,7 +92,7 @@ export async function getOutcomeAnalyticsStats(
     }
   }
 
-  const baseResume = resumeRows.find((resume) => resume.is_base_resume);
+  const baseResume = resumes.find((r) => r.is_base_resume);
   const fallbackResumeLabel = baseResume?.version_label ?? "Base/unknown";
 
   const byResumeVersion = new Map<string, AnalyticsRateBucket>();
@@ -100,14 +100,14 @@ export async function getOutcomeAnalyticsStats(
     DAYS.map((day) => [day, emptyRateBucket(day)])
   );
   const byEmailLength = new Map<string, AnalyticsRateBucket>(
-    EMAIL_LENGTH_BUCKETS.map((bucket) => [bucket.label, emptyRateBucket(bucket.label)])
+    EMAIL_LENGTH_BUCKETS.map((b) => [b.label, emptyRateBucket(b.label)])
   );
   const byWeek = new Map<string, AnalyticsRateBucket>();
 
   let replyCount = 0;
 
   for (const row of rows) {
-    const replied = row.reply_received === true;
+    const replied = Boolean(row.reply_received);
     if (replied) replyCount += 1;
 
     const resumeLabel = row.application_id

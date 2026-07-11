@@ -1,54 +1,53 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import type { Resume } from "@/lib/types";
 import type { ResumeContent } from "@/lib/validation/resume";
 
-export async function listResumes(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<Resume[]> {
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Resume[];
+function now() {
+  return new Date().toISOString();
 }
 
-export async function getResume(
-  supabase: SupabaseClient,
+function parseResume(row: Record<string, unknown>): Resume {
+  return {
+    ...row,
+    content_json: JSON.parse(row.content_json as string),
+    is_base_resume: Boolean(row.is_base_resume),
+  } as Resume;
+}
+
+export function listResumes(
+  db: Database.Database,
+  userId: string
+): Resume[] {
+  const rows = db
+    .prepare("SELECT * FROM resumes WHERE user_id = ? ORDER BY created_at DESC")
+    .all(userId) as Record<string, unknown>[];
+  return rows.map(parseResume);
+}
+
+export function getResume(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<Resume | null> {
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data as Resume | null;
+): Resume | null {
+  const row = db
+    .prepare("SELECT * FROM resumes WHERE id = ? AND user_id = ?")
+    .get(id, userId) as Record<string, unknown> | undefined;
+  return row ? parseResume(row) : null;
 }
 
-export async function getBaseResume(
-  supabase: SupabaseClient,
+export function getBaseResume(
+  db: Database.Database,
   userId: string
-): Promise<Resume | null> {
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("is_base_resume", true)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data as Resume | null;
+): Resume | null {
+  const row = db
+    .prepare("SELECT * FROM resumes WHERE user_id = ? AND is_base_resume = 1")
+    .get(userId) as Record<string, unknown> | undefined;
+  return row ? parseResume(row) : null;
 }
 
-export async function createResume(
-  supabase: SupabaseClient,
+export function createResume(
+  db: Database.Database,
   userId: string,
   input: {
     version_label: string;
@@ -56,94 +55,82 @@ export async function createResume(
     is_base_resume?: boolean;
     tailored_for_application_id?: string | null;
   }
-): Promise<Resume> {
+): Resume {
+  const id = uuidv4();
+
   if (input.is_base_resume) {
-    await supabase
-      .from("resumes")
-      .update({ is_base_resume: false })
-      .eq("user_id", userId)
-      .eq("is_base_resume", true);
+    db.prepare(
+      "UPDATE resumes SET is_base_resume = 0 WHERE user_id = ? AND is_base_resume = 1"
+    ).run(userId);
   }
 
-  const { data, error } = await supabase
-    .from("resumes")
-    .insert({
-      user_id: userId,
-      version_label: input.version_label,
-      content_json: input.content_json,
-      is_base_resume: input.is_base_resume ?? false,
-      tailored_for_application_id: input.tailored_for_application_id ?? null,
-    })
-    .select()
-    .single();
+  db.prepare(
+    `INSERT INTO resumes (id, user_id, version_label, content_json, is_base_resume, tailored_for_application_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    userId,
+    input.version_label,
+    JSON.stringify(input.content_json),
+    input.is_base_resume ? 1 : 0,
+    input.tailored_for_application_id ?? null,
+    now()
+  );
 
-  if (error) throw new Error(error.message);
-  return data as Resume;
+  return getResume(db, userId, id)!;
 }
 
-export async function updateResume(
-  supabase: SupabaseClient,
+export function updateResume(
+  db: Database.Database,
   userId: string,
   id: string,
-  input: {
-    version_label?: string;
-    content_json?: ResumeContent;
+  input: { version_label?: string; content_json?: ResumeContent }
+): Resume {
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  if (input.version_label !== undefined) {
+    updates.push("version_label = ?");
+    values.push(input.version_label);
   }
-): Promise<Resume> {
-  const payload: Record<string, unknown> = {};
-  if (input.version_label !== undefined) payload.version_label = input.version_label;
-  if (input.content_json !== undefined) payload.content_json = input.content_json;
+  if (input.content_json !== undefined) {
+    updates.push("content_json = ?");
+    values.push(JSON.stringify(input.content_json));
+  }
 
-  const { data, error } = await supabase
-    .from("resumes")
-    .update(payload)
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  if (updates.length > 0) {
+    values.push(id, userId);
+    db.prepare(`UPDATE resumes SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...values);
+  }
 
-  if (error) throw new Error(error.message);
-  return data as Resume;
+  return getResume(db, userId, id)!;
 }
 
-export async function setBaseResume(
-  supabase: SupabaseClient,
+export function setBaseResume(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<Resume> {
-  const existing = await getResume(supabase, userId, id);
+): Resume {
+  const existing = getResume(db, userId, id);
   if (!existing) throw new Error("Resume not found");
 
-  await supabase
-    .from("resumes")
-    .update({ is_base_resume: false })
-    .eq("user_id", userId)
-    .eq("is_base_resume", true);
+  db.prepare(
+    "UPDATE resumes SET is_base_resume = 0 WHERE user_id = ? AND is_base_resume = 1"
+  ).run(userId);
 
-  const { data, error } = await supabase
-    .from("resumes")
-    .update({ is_base_resume: true, tailored_for_application_id: null })
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  db.prepare(
+    "UPDATE resumes SET is_base_resume = 1, tailored_for_application_id = NULL WHERE id = ? AND user_id = ?"
+  ).run(id, userId);
 
-  if (error) throw new Error(error.message);
-  return data as Resume;
+  return getResume(db, userId, id)!;
 }
 
-export async function deleteResume(
-  supabase: SupabaseClient,
+export function deleteResume(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<void> {
-  const { error } = await supabase
-    .from("resumes")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
+): void {
+  db.prepare("DELETE FROM resumes WHERE id = ? AND user_id = ?").run(id, userId);
 }
 
 export function resumeContentToText(content: ResumeContent): string {

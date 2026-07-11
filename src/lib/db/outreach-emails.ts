@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
 import type { OutreachEmail, OutreachEmailWithContact } from "@/lib/types";
 import type { OutreachEmailStatus, OutreachOutcome } from "@/lib/validation/outreach";
 import {
@@ -7,42 +8,69 @@ import {
   canTransition,
 } from "@/lib/validation/outreach";
 
-export async function listOutreachEmails(
-  supabase: SupabaseClient,
+function now() {
+  return new Date().toISOString();
+}
+
+function parseOutreachRow(row: Record<string, unknown>): OutreachEmail {
+  return {
+    ...row,
+    reply_received: Boolean(row.reply_received),
+  } as OutreachEmail;
+}
+
+function parseOutreachWithContact(row: Record<string, unknown>): OutreachEmailWithContact {
+  const email = parseOutreachRow(row);
+  const contacts = row.contact_name
+    ? {
+        name: row.contact_name as string,
+        email: row.contact_email as string | null,
+        company_name: row.contact_company_name as string | null,
+        role_title: row.contact_role_title as string | null,
+      }
+    : null;
+  return { ...email, contacts } as OutreachEmailWithContact;
+}
+
+const JOIN_QUERY = `
+  SELECT oe.*,
+    c.name AS contact_name, c.email AS contact_email,
+    c.company_name AS contact_company_name, c.role_title AS contact_role_title
+  FROM outreach_emails oe
+  LEFT JOIN contacts c ON oe.contact_id = c.id
+`;
+
+export function listOutreachEmails(
+  db: Database.Database,
   userId: string,
   status?: OutreachEmailStatus
-): Promise<OutreachEmailWithContact[]> {
-  let query = supabase
-    .from("outreach_emails")
-    .select("*, contacts(name, email, company_name, role_title)")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
+): OutreachEmailWithContact[] {
+  let sql = `${JOIN_QUERY} WHERE oe.user_id = ?`;
+  const params: unknown[] = [userId];
 
-  if (status) query = query.eq("status", status);
+  if (status) {
+    sql += " AND oe.status = ?";
+    params.push(status);
+  }
+  sql += " ORDER BY oe.updated_at DESC";
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as OutreachEmailWithContact[];
+  const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
+  return rows.map(parseOutreachWithContact);
 }
 
-export async function getOutreachEmail(
-  supabase: SupabaseClient,
+export function getOutreachEmail(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<OutreachEmailWithContact | null> {
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .select("*, contacts(name, email, company_name, role_title)")
-    .eq("id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data as OutreachEmailWithContact | null;
+): OutreachEmailWithContact | null {
+  const row = db
+    .prepare(`${JOIN_QUERY} WHERE oe.id = ? AND oe.user_id = ?`)
+    .get(id, userId) as Record<string, unknown> | undefined;
+  return row ? parseOutreachWithContact(row) : null;
 }
 
-export async function createOutreachEmail(
-  supabase: SupabaseClient,
+export function createOutreachEmail(
+  db: Database.Database,
   userId: string,
   input: {
     contact_id: string;
@@ -50,161 +78,142 @@ export async function createOutreachEmail(
     subject: string;
     body: string;
   }
-): Promise<OutreachEmail> {
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .insert({
-      user_id: userId,
-      contact_id: input.contact_id,
-      application_id: input.application_id,
-      subject: input.subject,
-      body: input.body,
-      status: "draft",
-      date_drafted: new Date().toISOString(),
-    })
-    .select()
-    .single();
+): OutreachEmail {
+  const id = uuidv4();
+  const timestamp = now();
 
-  if (error) throw new Error(error.message);
-  return data as OutreachEmail;
+  db.prepare(
+    `INSERT INTO outreach_emails (id, user_id, contact_id, application_id, subject, body, status, date_drafted, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
+  ).run(id, userId, input.contact_id, input.application_id, input.subject, input.body, timestamp, timestamp, timestamp);
+
+  return parseOutreachRow(
+    db.prepare("SELECT * FROM outreach_emails WHERE id = ?").get(id) as Record<string, unknown>
+  );
 }
 
-export async function updateOutreachDraftContent(
-  supabase: SupabaseClient,
+export function updateOutreachDraftContent(
+  db: Database.Database,
   userId: string,
   id: string,
   input: { subject?: string; body?: string }
-): Promise<OutreachEmail> {
-  const existing = await getOutreachEmail(supabase, userId, id);
+): OutreachEmail {
+  const existing = getOutreachEmail(db, userId, id);
   if (!existing) throw new Error("Outreach email not found");
   assertCanEdit(existing.status);
 
-  const payload: Record<string, string> = {};
-  if (input.subject !== undefined) payload.subject = input.subject;
-  if (input.body !== undefined) payload.body = input.body;
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  if (input.subject !== undefined) { updates.push("subject = ?"); values.push(input.subject); }
+  if (input.body !== undefined) { updates.push("body = ?"); values.push(input.body); }
 
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .update(payload)
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  if (updates.length > 0) {
+    updates.push("updated_at = ?");
+    values.push(now(), id, userId);
+    db.prepare(`UPDATE outreach_emails SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...values);
+  }
 
-  if (error) throw new Error(error.message);
-  return data as OutreachEmail;
+  return parseOutreachRow(
+    db.prepare("SELECT * FROM outreach_emails WHERE id = ?").get(id) as Record<string, unknown>
+  );
 }
 
-async function transitionStatus(
-  supabase: SupabaseClient,
+function transitionStatus(
+  db: Database.Database,
   userId: string,
   id: string,
   toStatus: OutreachEmailStatus,
   extra?: Record<string, unknown>
-): Promise<OutreachEmail> {
-  const existing = await getOutreachEmail(supabase, userId, id);
+): OutreachEmail {
+  const existing = getOutreachEmail(db, userId, id);
   if (!existing) throw new Error("Outreach email not found");
 
   if (!canTransition(existing.status, toStatus)) {
-    throw new Error(
-      `Invalid status transition: "${existing.status}" → "${toStatus}"`
-    );
+    throw new Error(`Invalid status transition: "${existing.status}" → "${toStatus}"`);
   }
 
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .update({ status: toStatus, ...extra })
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  const updates: string[] = ["status = ?", "updated_at = ?"];
+  const values: unknown[] = [toStatus, now()];
 
-  if (error) throw new Error(error.message);
-  return data as OutreachEmail;
+  if (extra) {
+    for (const [key, val] of Object.entries(extra)) {
+      updates.push(`${key} = ?`);
+      values.push(val);
+    }
+  }
+
+  values.push(id, userId);
+  db.prepare(`UPDATE outreach_emails SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...values);
+
+  return parseOutreachRow(
+    db.prepare("SELECT * FROM outreach_emails WHERE id = ?").get(id) as Record<string, unknown>
+  );
 }
 
-export async function approveOutreachEmail(
-  supabase: SupabaseClient,
-  userId: string,
-  id: string
-): Promise<OutreachEmail> {
-  return transitionStatus(supabase, userId, id, "approved");
+export function approveOutreachEmail(db: Database.Database, userId: string, id: string): OutreachEmail {
+  return transitionStatus(db, userId, id, "approved");
 }
 
-export async function rejectOutreachEmail(
-  supabase: SupabaseClient,
-  userId: string,
-  id: string
-): Promise<OutreachEmail> {
-  return transitionStatus(supabase, userId, id, "rejected");
+export function rejectOutreachEmail(db: Database.Database, userId: string, id: string): OutreachEmail {
+  return transitionStatus(db, userId, id, "rejected");
 }
 
-export async function markOutreachSent(
-  supabase: SupabaseClient,
-  userId: string,
-  id: string
-): Promise<OutreachEmail> {
-  const existing = await getOutreachEmail(supabase, userId, id);
+export function markOutreachSent(db: Database.Database, userId: string, id: string): OutreachEmail {
+  const existing = getOutreachEmail(db, userId, id);
   if (!existing) throw new Error("Outreach email not found");
   assertCanSend(existing.status);
-
-  return transitionStatus(supabase, userId, id, "sent", {
-    date_sent: new Date().toISOString(),
-  });
+  return transitionStatus(db, userId, id, "sent", { date_sent: now() });
 }
 
-export async function updateOutreachFromRegeneration(
-  supabase: SupabaseClient,
+export function updateOutreachFromRegeneration(
+  db: Database.Database,
   userId: string,
   id: string,
   input: { subject: string; body: string }
-): Promise<OutreachEmail> {
-  const existing = await getOutreachEmail(supabase, userId, id);
+): OutreachEmail {
+  const existing = getOutreachEmail(db, userId, id);
   if (!existing) throw new Error("Outreach email not found");
 
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .update({
-      subject: input.subject,
-      body: input.body,
-      status: "draft",
-      date_drafted: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  db.prepare(
+    `UPDATE outreach_emails SET subject = ?, body = ?, status = 'draft', date_drafted = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+  ).run(input.subject, input.body, now(), now(), id, userId);
 
-  if (error) throw new Error(error.message);
-  return data as OutreachEmail;
+  return parseOutreachRow(
+    db.prepare("SELECT * FROM outreach_emails WHERE id = ?").get(id) as Record<string, unknown>
+  );
 }
 
-export async function updateOutreachOutcome(
-  supabase: SupabaseClient,
+export function updateOutreachOutcome(
+  db: Database.Database,
   userId: string,
   id: string,
   input: { reply_received?: boolean; outcome?: OutreachOutcome | null }
-): Promise<OutreachEmail> {
-  const existing = await getOutreachEmail(supabase, userId, id);
+): OutreachEmail {
+  const existing = getOutreachEmail(db, userId, id);
   if (!existing) throw new Error("Outreach email not found");
   if (existing.status !== "sent") {
     throw new Error("Outcomes can only be logged for sent emails");
   }
 
-  const payload: Record<string, unknown> = {};
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
   if (input.reply_received !== undefined) {
-    payload.reply_received = input.reply_received;
+    updates.push("reply_received = ?");
+    values.push(input.reply_received ? 1 : 0);
   }
-  if (input.outcome !== undefined) payload.outcome = input.outcome;
+  if (input.outcome !== undefined) {
+    updates.push("outcome = ?");
+    values.push(input.outcome);
+  }
 
-  const { data, error } = await supabase
-    .from("outreach_emails")
-    .update(payload)
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  if (updates.length > 0) {
+    updates.push("updated_at = ?");
+    values.push(now(), id, userId);
+    db.prepare(`UPDATE outreach_emails SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`).run(...values);
+  }
 
-  if (error) throw new Error(error.message);
-  return data as OutreachEmail;
+  return parseOutreachRow(
+    db.prepare("SELECT * FROM outreach_emails WHERE id = ?").get(id) as Record<string, unknown>
+  );
 }

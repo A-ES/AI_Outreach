@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import { createLLMAdapter } from "@/lib/llm/adapters";
 import { logLLMGeneration } from "@/lib/llm/logging";
 import type {
@@ -16,7 +16,7 @@ const MAX_VALIDATION_RETRIES = 1;
 
 interface LLMClientOptions {
   adapter?: LLMAdapter;
-  supabase: SupabaseClient;
+  db: Database.Database;
 }
 
 /**
@@ -25,11 +25,11 @@ interface LLMClientOptions {
  */
 export class LLMClient {
   private adapter: LLMAdapter;
-  private supabase: SupabaseClient;
+  private db: Database.Database;
 
   constructor(options: LLMClientOptions) {
     this.adapter = options.adapter ?? createLLMAdapter();
-    this.supabase = options.supabase;
+    this.db = options.db;
   }
 
   async generate<T>(params: LLMGenerateParams<T>): Promise<LLMGenerateResult<T>> {
@@ -65,7 +65,7 @@ export class LLMClient {
       const validation = validateLLMOutput(adapterResult.content, params.schema);
 
       if (validation.ok) {
-        const log = await logLLMGeneration(this.supabase, {
+        const log = logLLMGeneration(this.db, {
           userId: params.userId,
           featureName: params.featureName,
           promptText: params.prompt,
@@ -99,7 +99,7 @@ export class LLMClient {
       }
     }
 
-    const log = await logLLMGeneration(this.supabase, {
+    const log = logLLMGeneration(this.db, {
       userId: params.userId,
       featureName: params.featureName,
       promptText: params.prompt,
@@ -126,6 +126,6 @@ export class LLMClient {
   }
 }
 
-export function createLLMClient(supabase: SupabaseClient, adapter?: LLMAdapter) {
-  return new LLMClient({ supabase, adapter });
+export function createLLMClient(db: Database.Database, adapter?: LLMAdapter) {
+  return new LLMClient({ db, adapter });
 }

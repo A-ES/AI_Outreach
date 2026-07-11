@@ -6,16 +6,15 @@ import {
 } from "@/lib/services/analytics-service";
 
 export async function GET() {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
-    const stats = await getOutcomeAnalyticsStats(supabase, user!.id);
+    const stats = getOutcomeAnalyticsStats(db, user.id);
     let insight = null;
     let insightError = null;
 
     try {
-      insight = await createAnalyticsService(supabase).generateInsights(user!.id);
+      insight = await createAnalyticsService(db).generateInsights(user.id);
     } catch (e) {
       insightError =
         e instanceof Error ? e.message : "Failed to generate analytics insight";

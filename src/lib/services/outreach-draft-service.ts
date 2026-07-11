@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import { getApplication } from "@/lib/db/applications";
 import { getContact } from "@/lib/db/contacts";
 import { getBaseResume } from "@/lib/db/resumes";
@@ -30,7 +30,7 @@ export interface DraftNeedsReview {
 export type DraftResult = DraftSuccess | DraftNeedsReview;
 
 interface OutreachDraftServiceDeps {
-  supabase: SupabaseClient;
+  db: Database.Database;
   userId: string;
   /** Optional note when regenerating (e.g. "make it shorter"). */
   regenerationNote?: string;
@@ -38,13 +38,13 @@ interface OutreachDraftServiceDeps {
 }
 
 export class OutreachDraftService {
-  private supabase: SupabaseClient;
+  private db: Database.Database;
   private userId: string;
   private regenerationNote?: string;
   private llmClient?: Pick<LLMClient, "generate">;
 
   constructor(deps: OutreachDraftServiceDeps) {
-    this.supabase = deps.supabase;
+    this.db = deps.db;
     this.userId = deps.userId;
     this.regenerationNote = deps.regenerationNote;
     this.llmClient = deps.llmClient;
@@ -55,7 +55,7 @@ export class OutreachDraftService {
    * Uses lightweight keyword retrieval — not vector search.
    */
   async generate(contactId: string): Promise<DraftResult> {
-    const contact = await getContact(this.supabase, this.userId, contactId);
+    const contact = getContact(this.db, this.userId, contactId);
     if (!contact) throw new Error("Contact not found");
 
     let applicationRole: string | null = null;
@@ -63,8 +63,8 @@ export class OutreachDraftService {
     let applicationContext = "No linked application.";
 
     if (contact.application_id) {
-      const app = await getApplication(
-        this.supabase,
+      const app = getApplication(
+        this.db,
         this.userId,
         contact.application_id
       );
@@ -83,7 +83,7 @@ export class OutreachDraftService {
       }
     }
 
-    const baseResume = await getBaseResume(this.supabase, this.userId);
+    const baseResume = getBaseResume(this.db, this.userId);
     const highlights = baseResume
       ? retrieveRelevantHighlights(baseResume.content_json, {
           contactRole: contact.role_title,
@@ -106,7 +106,7 @@ export class OutreachDraftService {
       regeneration_note: regenerationNote,
     });
 
-    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.db);
     const result = await llmClient.generate({
       prompt,
       schema: outreachDraftOutputSchema,

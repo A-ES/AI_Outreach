@@ -7,6 +7,8 @@ import { diffResumeContent } from "@/lib/utils/resume-diff";
 import { HallucinationWarnings } from "@/components/resume-tailor/HallucinationWarnings";
 import { ResumeDiffView } from "@/components/resume-tailor/ResumeDiffView";
 import { SequentialLoading } from "@/components/ui/SequentialLoading";
+import { ResumeStructuredEditor } from "@/components/resumes/ResumeStructuredEditor";
+import { emptyResumeContent } from "@/lib/validation/resume";
 
 interface TailorDraft {
   baseResumeId: string;
@@ -39,6 +41,11 @@ export function ResumeTailorView({ initialApplicationId = null }: ResumeTailorVi
   const [thinkingMode, setThinkingMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [parsingPdf, setParsingPdf] = useState(false);
+  const [savingParsedResume, setSavingParsedResume] = useState(false);
+  const [parsedResumeContent, setParsedResumeContent] =
+    useState<ResumeContent>(emptyResumeContent());
+  const [parsedResumeLabel, setParsedResumeLabel] = useState("Parsed base resume");
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<TailorDraft | null>(null);
   const [meta, setMeta] = useState<TailorMeta | null>(null);
@@ -156,6 +163,52 @@ export function ResumeTailorView({ initialApplicationId = null }: ResumeTailorVi
     setNeedsReview(null);
   }
 
+  async function handlePdfUpload(file: File | null) {
+    if (!file) return;
+    setParsingPdf(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/resumes/parse-pdf", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to parse PDF");
+      setParsedResumeContent(data.content);
+      setParsedResumeLabel(file.name.replace(/\.pdf$/i, "") || "Parsed base resume");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to parse PDF");
+    } finally {
+      setParsingPdf(false);
+    }
+  }
+
+  async function saveParsedResume() {
+    setSavingParsedResume(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/resumes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version_label: parsedResumeLabel,
+          content_json: parsedResumeContent,
+          is_base_resume: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save parsed resume");
+      setResumes((prev) => [data.resume, ...prev]);
+      setBaseResumeId(data.resume.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save parsed resume");
+    } finally {
+      setSavingParsedResume(false);
+    }
+  }
+
   const baseResumes = resumes.filter((r) => r.is_base_resume);
 
   return (
@@ -199,6 +252,52 @@ export function ResumeTailorView({ initialApplicationId = null }: ResumeTailorVi
                   </option>
                 ))}
             </select>
+          )}
+        </div>
+
+        <div className="rounded-card border border-border bg-panel-subtle p-4">
+          <label className="caption mb-1 block font-medium">
+            Upload PDF as base resume
+          </label>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => handlePdfUpload(e.target.files?.[0] ?? null)}
+            className="input-field"
+          />
+          <p className="caption mt-2">
+            Parsed sections are editable before saving as a base resume for tailoring.
+          </p>
+          {parsingPdf ? (
+            <div className="mt-3">
+              <SequentialLoading
+                steps={[
+                  "Extracting PDF text...",
+                  "Segmenting resume sections...",
+                  "Preparing editable structure...",
+                ]}
+              />
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <input
+                value={parsedResumeLabel}
+                onChange={(e) => setParsedResumeLabel(e.target.value)}
+                className="input-field"
+              />
+              <ResumeStructuredEditor
+                content={parsedResumeContent}
+                onChange={setParsedResumeContent}
+              />
+              <button
+                type="button"
+                onClick={saveParsedResume}
+                disabled={savingParsedResume || !parsedResumeLabel.trim()}
+                className="btn-secondary"
+              >
+                {savingParsedResume ? "Saving..." : "Save parsed resume as base"}
+              </button>
+            </div>
           )}
         </div>
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { ApplicationMatchHistory } from "@/components/resume-match/ApplicationMatchHistory";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/sqlite";
 import { getApplication } from "@/lib/db/applications";
 import { STATUS_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/utils/dates";
@@ -11,15 +11,9 @@ interface PageProps {
   params: { id: string };
 }
 
-export default async function ApplicationDetailPage({ params }: PageProps) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) notFound();
-
-  const application = await getApplication(supabase, user.id, params.id);
+export default function ApplicationDetailPage({ params }: PageProps) {
+  const db = getDb();
+  const application = getApplication(db, "local", params.id);
   if (!application) notFound();
 
   return (

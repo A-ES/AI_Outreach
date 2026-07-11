@@ -6,11 +6,10 @@ import { outreachUpdateDraftSchema } from "@/lib/validation/outreach";
 type RouteContext = { params: { id: string } };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
-    const email = await getOutreachEmail(supabase, user!.id, context.params.id);
+    const email = getOutreachEmail(db, user.id, context.params.id);
     if (!email) return jsonError("Outreach email not found", 404);
     return jsonData({ email });
   } catch (e) {
@@ -19,8 +18,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
     const body = await request.json();
@@ -29,12 +27,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return jsonError(parsed.error.issues[0]?.message ?? "Invalid input");
     }
 
-    const email = await updateOutreachDraftContent(
-      supabase,
-      user!.id,
-      context.params.id,
-      parsed.data
-    );
+    const email = updateOutreachDraftContent(db, user.id, context.params.id, parsed.data);
     return jsonData({ email });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update draft";

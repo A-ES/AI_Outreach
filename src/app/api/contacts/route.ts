@@ -1,18 +1,13 @@
 import { NextRequest } from "next/server";
-import {
-  jsonData,
-  jsonError,
-  requireUser,
-} from "@/lib/api/helpers";
+import { jsonData, jsonError, requireUser } from "@/lib/api/helpers";
 import { listContacts, createContact } from "@/lib/db/contacts";
 import { contactCreateSchema } from "@/lib/validation/schemas";
 
 export async function GET() {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
-    const contacts = await listContacts(supabase, user!.id);
+    const contacts = listContacts(db, user.id);
     return jsonData({ contacts });
   } catch (e) {
     return jsonError(e instanceof Error ? e.message : "Failed to fetch contacts", 500);
@@ -20,8 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { user, supabase, error } = await requireUser();
-  if (error) return error;
+  const { user, db } = requireUser();
 
   try {
     const body = await request.json();
@@ -30,7 +24,7 @@ export async function POST(request: NextRequest) {
       return jsonError(parsed.error.issues[0]?.message ?? "Invalid input");
     }
 
-    const contact = await createContact(supabase, user!.id, parsed.data);
+    const contact = createContact(db, user.id, parsed.data);
     return jsonData({ contact }, 201);
   } catch (e) {
     return jsonError(e instanceof Error ? e.message : "Failed to create contact", 500);

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import { getResume } from "@/lib/db/resumes";
 import { createLLMClient } from "@/lib/llm/client";
 import type { LLMClient } from "@/lib/llm/client";
@@ -38,7 +38,7 @@ export interface TailorNeedsReview {
 export type TailorResult = TailorSuccess | TailorNeedsReview;
 
 interface ResumeTailorServiceDeps {
-  supabase: SupabaseClient;
+  db: Database.Database;
   userId: string;
   applicationId?: string | null;
   useFlashFallback?: boolean;
@@ -62,7 +62,7 @@ function getTailorConfig(deps: ResumeTailorServiceDeps) {
 }
 
 export class ResumeTailorService {
-  private supabase: SupabaseClient;
+  private db: Database.Database;
   private userId: string;
   private applicationId: string | null;
   private useFlashFallback: boolean;
@@ -70,7 +70,7 @@ export class ResumeTailorService {
   private llmClient?: Pick<LLMClient, "generate">;
 
   constructor(deps: ResumeTailorServiceDeps) {
-    this.supabase = deps.supabase;
+    this.db = deps.db;
     this.userId = deps.userId;
     this.applicationId = deps.applicationId ?? null;
     this.useFlashFallback = deps.useFlashFallback ?? false;
@@ -86,7 +86,7 @@ export class ResumeTailorService {
     baseResumeId: string,
     jobDescriptionText: string
   ): Promise<TailorResult> {
-    const baseResume = await getResume(this.supabase, this.userId, baseResumeId);
+    const baseResume = getResume(this.db, this.userId, baseResumeId);
     if (!baseResume) throw new Error("Base resume not found");
 
     if (!jobDescriptionText.trim()) {
@@ -96,13 +96,13 @@ export class ResumeTailorService {
     const baseContent = baseResume.content_json;
     const baseJson = JSON.stringify(baseContent, null, 2);
     const { model, thinkingMode } = getTailorConfig({
-      supabase: this.supabase,
+      db: this.db,
       userId: this.userId,
       useFlashFallback: this.useFlashFallback,
       thinkingMode: this.thinkingMode,
     });
 
-    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.db);
 
     const tailorPrompt = loadPromptTemplate("resume_tailor.md", {
       job_description: jobDescriptionText.trim(),

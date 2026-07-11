@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import { getOutcomeAnalyticsStats } from "@/lib/db/analytics";
 import { createLLMClient } from "@/lib/llm/client";
 import type { LLMClient } from "@/lib/llm/client";
@@ -16,7 +16,6 @@ export const MIN_LOGGED_OUTCOMES_FOR_ANALYTICS = 15;
 const FEATURE_NAME = "analytics_insights";
 
 interface AnalyticsServiceDeps {
-  supabase: SupabaseClient;
   llmClient?: Pick<LLMClient, "generate">;
   statsProvider?: typeof getOutcomeAnalyticsStats;
 }
@@ -25,13 +24,13 @@ export class AnalyticsService {
   private readonly llmClient?: Pick<LLMClient, "generate">;
   private readonly statsProvider: typeof getOutcomeAnalyticsStats;
 
-  constructor(private readonly supabase: SupabaseClient, deps?: Partial<AnalyticsServiceDeps>) {
+  constructor(private readonly db: Database.Database, deps?: Partial<AnalyticsServiceDeps>) {
     this.llmClient = deps?.llmClient;
     this.statsProvider = deps?.statsProvider ?? getOutcomeAnalyticsStats;
   }
 
   async generateInsights(userId: string): Promise<AnalyticsResult> {
-    const stats = await this.statsProvider(this.supabase, userId);
+    const stats = this.statsProvider(this.db, userId);
 
     if (stats.logged_outcome_count < MIN_LOGGED_OUTCOMES_FOR_ANALYTICS) {
       return {
@@ -45,7 +44,7 @@ export class AnalyticsService {
       aggregate_statistics_json: JSON.stringify(stats, null, 2),
     });
 
-    const llmClient = this.llmClient ?? createLLMClient(this.supabase);
+    const llmClient = this.llmClient ?? createLLMClient(this.db);
     const result = await llmClient.generate({
       userId,
       featureName: FEATURE_NAME,
@@ -66,8 +65,8 @@ export class AnalyticsService {
 }
 
 export function createAnalyticsService(
-  supabase: SupabaseClient,
+  db: Database.Database,
   deps?: Partial<AnalyticsServiceDeps>
 ) {
-  return new AnalyticsService(supabase, deps);
+  return new AnalyticsService(db, deps);
 }

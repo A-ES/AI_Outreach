@@ -1,9 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type {
-  Application,
-  ApplicationStatus,
-  DashboardStats,
-} from "@/lib/types";
+import type Database from "better-sqlite3";
+import { v4 as uuidv4 } from "uuid";
+import type { Application, ApplicationStatus } from "@/lib/types";
 import type {
   ApplicationCreateInput,
   ApplicationUpdateInput,
@@ -15,179 +12,202 @@ function emptyToNull(value: string | null | undefined): string | null {
   return value === "" ? null : value;
 }
 
-function buildStatusFields(
-  status: ApplicationStatus,
-  previousStatus?: ApplicationStatus,
-  dateApplied?: string | null
-) {
-  const today = todayISO();
-  const fields: Record<string, string | null> = {
-    status,
-    date_status_changed: today,
-  };
-
-  if (
-    status !== "saved" &&
-    (previousStatus === "saved" || previousStatus === undefined) &&
-    !dateApplied
-  ) {
-    fields.date_applied = today;
-  }
-
-  return fields;
+function now() {
+  return new Date().toISOString();
 }
 
-export async function listApplications(
-  supabase: SupabaseClient,
+export function listApplications(
+  db: Database.Database,
   userId: string
-): Promise<Application[]> {
-  const { data, error } = await supabase
-    .from("applications")
-    .select("*")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Application[];
+): Application[] {
+  return db
+    .prepare(
+      "SELECT * FROM applications WHERE user_id = ? ORDER BY updated_at DESC"
+    )
+    .all(userId) as Application[];
 }
 
-export async function getApplication(
-  supabase: SupabaseClient,
+export function getApplication(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<Application | null> {
-  const { data, error } = await supabase
-    .from("applications")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data as Application | null;
+): Application | null {
+  return (
+    (db
+      .prepare("SELECT * FROM applications WHERE id = ? AND user_id = ?")
+      .get(id, userId) as Application | undefined) ?? null
+  );
 }
 
-export async function createApplication(
-  supabase: SupabaseClient,
+export function createApplication(
+  db: Database.Database,
   userId: string,
   input: ApplicationCreateInput
-): Promise<Application> {
-  const status = input.status ?? "saved";
-  const payload = {
-    user_id: userId,
-    company_name: input.company_name,
-    role_title: input.role_title,
-    job_description_text: emptyToNull(input.job_description_text ?? null),
-    status,
-    date_applied: emptyToNull(input.date_applied ?? null),
-    date_status_changed: status !== "saved" ? todayISO() : null,
-    notes: emptyToNull(input.notes ?? null),
-  };
+): Application {
+  const id = uuidv4();
+  const status = input.status ?? "applied";
+  const timestamp = now();
+  let dateApplied = emptyToNull(input.date_applied ?? null);
+  const dateStatusChanged = status !== "saved" ? todayISO() : null;
 
-  if (status !== "saved" && !payload.date_applied) {
-    payload.date_applied = todayISO();
+  if (status !== "saved" && !dateApplied) {
+    dateApplied = todayISO();
   }
 
-  const { data, error } = await supabase
-    .from("applications")
-    .insert(payload)
-    .select()
-    .single();
+  db.prepare(
+    `INSERT INTO applications (id, user_id, company_name, role_title, platform, application_url, contact_id, job_description_text, followup_status, status, date_applied, date_status_changed, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    userId,
+    input.company_name,
+    input.role_title,
+    input.platform ?? null,
+    emptyToNull(input.application_url ?? null),
+    input.contact_id ?? null,
+    emptyToNull(input.job_description_text ?? null),
+    input.followup_status ?? null,
+    status,
+    dateApplied,
+    dateStatusChanged,
+    emptyToNull(input.notes ?? null),
+    timestamp,
+    timestamp
+  );
 
-  if (error) throw new Error(error.message);
-  return data as Application;
+  return getApplication(db, userId, id)!;
 }
 
-export async function updateApplication(
-  supabase: SupabaseClient,
+export function updateApplication(
+  db: Database.Database,
   userId: string,
   id: string,
   input: ApplicationUpdateInput
-): Promise<Application> {
-  const existing = await getApplication(supabase, userId, id);
+): Application {
+  const existing = getApplication(db, userId, id);
   if (!existing) throw new Error("Application not found");
 
-  const payload: Record<string, unknown> = {};
+  const updates: string[] = [];
+  const values: unknown[] = [];
 
-  if (input.company_name !== undefined) payload.company_name = input.company_name;
-  if (input.role_title !== undefined) payload.role_title = input.role_title;
+  if (input.company_name !== undefined) {
+    updates.push("company_name = ?");
+    values.push(input.company_name);
+  }
+  if (input.role_title !== undefined) {
+    updates.push("role_title = ?");
+    values.push(input.role_title);
+  }
+  if (input.platform !== undefined) {
+    updates.push("platform = ?");
+    values.push(input.platform);
+  }
+  if (input.application_url !== undefined) {
+    updates.push("application_url = ?");
+    values.push(emptyToNull(input.application_url));
+  }
+  if (input.contact_id !== undefined) {
+    updates.push("contact_id = ?");
+    values.push(input.contact_id);
+  }
+  if (input.followup_status !== undefined) {
+    updates.push("followup_status = ?");
+    values.push(input.followup_status);
+  }
   if (input.job_description_text !== undefined) {
-    payload.job_description_text = emptyToNull(input.job_description_text);
+    updates.push("job_description_text = ?");
+    values.push(emptyToNull(input.job_description_text));
   }
-  if (input.notes !== undefined) payload.notes = emptyToNull(input.notes);
+  if (input.notes !== undefined) {
+    updates.push("notes = ?");
+    values.push(emptyToNull(input.notes));
+  }
   if (input.date_applied !== undefined) {
-    payload.date_applied = emptyToNull(input.date_applied);
+    updates.push("date_applied = ?");
+    values.push(emptyToNull(input.date_applied));
   }
-
   if (input.status !== undefined && input.status !== existing.status) {
-    Object.assign(
-      payload,
-      buildStatusFields(
-        input.status,
-        existing.status,
-        (input.date_applied ?? existing.date_applied) as string | null
-      )
-    );
+    updates.push("status = ?");
+    values.push(input.status);
+    updates.push("date_status_changed = ?");
+    values.push(todayISO());
+    if (
+      input.status !== "saved" &&
+      existing.status === "saved" &&
+      !input.date_applied &&
+      !existing.date_applied
+    ) {
+      updates.push("date_applied = ?");
+      values.push(todayISO());
+    }
   }
 
-  const { data, error } = await supabase
-    .from("applications")
-    .update(payload)
-    .eq("id", id)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  if (updates.length > 0) {
+    updates.push("updated_at = ?");
+    values.push(now());
+    values.push(id, userId);
+    db.prepare(
+      `UPDATE applications SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`
+    ).run(...values);
+  }
 
-  if (error) throw new Error(error.message);
-  return data as Application;
+  return getApplication(db, userId, id)!;
 }
 
-export async function updateApplicationStatus(
-  supabase: SupabaseClient,
+export function updateApplicationStatus(
+  db: Database.Database,
   userId: string,
   id: string,
   status: ApplicationStatus
-): Promise<Application> {
-  return updateApplication(supabase, userId, id, { status });
+): Application {
+  return updateApplication(db, userId, id, { status });
 }
 
-export async function deleteApplication(
-  supabase: SupabaseClient,
+export function deleteApplication(
+  db: Database.Database,
   userId: string,
   id: string
-): Promise<void> {
-  const { error } = await supabase
-    .from("applications")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
+): void {
+  db.prepare("DELETE FROM applications WHERE id = ? AND user_id = ?").run(
+    id,
+    userId
+  );
 }
 
-export async function getDashboardStats(
-  supabase: SupabaseClient,
+export function getDashboardStats(
+  db: Database.Database,
   userId: string,
   weekStartDate: string
-): Promise<Omit<DashboardStats, "weeklyGoal"> & { weekStartDate: string }> {
-  const { data: applications, error: appError } = await supabase
-    .from("applications")
-    .select("status")
-    .eq("user_id", userId);
+): { totalApplications: number; totalInterviews: number; totalOffers: number; weekStartDate: string } {
+  const rows = db
+    .prepare("SELECT status FROM applications WHERE user_id = ?")
+    .all(userId) as { status: string }[];
 
-  if (appError) throw new Error(appError.message);
-
-  const rows = applications ?? [];
   const totalApplications = rows.length;
   const totalInterviews = rows.filter((a) =>
     ["interviewing", "offer"].includes(a.status)
   ).length;
   const totalOffers = rows.filter((a) => a.status === "offer").length;
 
-  return {
-    totalApplications,
-    totalInterviews,
-    totalOffers,
-    weekStartDate,
-  };
+  return { totalApplications, totalInterviews, totalOffers, weekStartDate };
+}
+
+export function getFollowUpsDueCount(
+  db: Database.Database,
+  userId: string
+): number {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const cutoff = sevenDaysAgo.toISOString().slice(0, 10);
+
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) as count FROM applications
+       WHERE user_id = ? AND status = 'applied'
+       AND date_applied IS NOT NULL AND date_applied <= ?
+       AND (followup_status IS NULL OR followup_status = 'no_response')`
+    )
+    .get(userId, cutoff) as { count: number };
+
+  return row.count;
 }

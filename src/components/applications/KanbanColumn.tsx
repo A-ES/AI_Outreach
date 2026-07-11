@@ -8,6 +8,8 @@ interface KanbanColumnProps {
   status: ApplicationStatus;
   title: string;
   applications: Application[];
+  totalCount: number;
+  overflow: number;
   onEdit: (app: Application) => void;
 }
 
@@ -15,6 +17,8 @@ export function KanbanColumn({
   status,
   title,
   applications,
+  totalCount,
+  overflow,
   onEdit,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -29,13 +33,18 @@ export function KanbanColumn({
       <div className="flex items-center justify-between border-b border-border px-3 py-3">
         <h3 className="text-sm font-medium text-foreground">{title}</h3>
         <span className="caption rounded-full bg-surface px-2 py-0.5">
-          {applications.length}
+          {totalCount}
         </span>
       </div>
       <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
         {applications.map((app) => (
           <KanbanCard key={app.id} application={app} onEdit={onEdit} />
         ))}
+        {overflow > 0 && (
+          <p className="caption mt-2 text-center text-accent">
+            +{overflow} more — switch to List view
+          </p>
+        )}
       </div>
     </div>
   );

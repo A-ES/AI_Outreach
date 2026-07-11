@@ -19,12 +19,14 @@ interface KanbanBoardProps {
   applications: Application[];
   onStatusChange: (id: string, status: ApplicationStatus) => Promise<void>;
   onEdit: (app: Application) => void;
+  maxPerColumn?: number;
 }
 
 export function KanbanBoard({
   applications,
   onStatusChange,
   onEdit,
+  maxPerColumn = 10,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,15 +79,22 @@ export function KanbanBoard({
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {KANBAN_COLUMNS.map((status) => (
-            <KanbanColumn
-              key={status}
-              status={status}
-              title={STATUS_LABELS[status]}
-              applications={appsForStatus(status)}
-              onEdit={onEdit}
-            />
-          ))}
+          {KANBAN_COLUMNS.map((status) => {
+            const all = appsForStatus(status);
+            const capped = all.slice(0, maxPerColumn);
+            const overflow = all.length - capped.length;
+            return (
+              <KanbanColumn
+                key={status}
+                status={status}
+                title={STATUS_LABELS[status]}
+                applications={capped}
+                totalCount={all.length}
+                overflow={overflow}
+                onEdit={onEdit}
+              />
+            );
+          })}
         </div>
         <DragOverlay>
           {activeApp ? (

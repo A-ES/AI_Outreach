@@ -1,22 +1,22 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type Database from "better-sqlite3";
 import type { DashboardStats } from "@/lib/types";
-import { getDashboardStats } from "@/lib/db/applications";
+import { getDashboardStats, getFollowUpsDueCount } from "@/lib/db/applications";
 import { getWeeklyGoal } from "@/lib/db/weekly-goals";
 
-export async function getDashboard(
-  supabase: SupabaseClient,
+export function getDashboard(
+  db: Database.Database,
   userId: string,
   weekStartDate: string
-): Promise<DashboardStats> {
-  const [stats, weeklyGoal] = await Promise.all([
-    getDashboardStats(supabase, userId, weekStartDate),
-    getWeeklyGoal(supabase, userId, weekStartDate),
-  ]);
+): DashboardStats {
+  const stats = getDashboardStats(db, userId, weekStartDate);
+  const weeklyGoal = getWeeklyGoal(db, userId, weekStartDate);
+  const followUpsDue = getFollowUpsDueCount(db, userId);
 
   return {
     totalApplications: stats.totalApplications,
     totalInterviews: stats.totalInterviews,
     totalOffers: stats.totalOffers,
+    followUpsDue,
     weeklyGoal,
   };
 }

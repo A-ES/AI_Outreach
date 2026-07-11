@@ -5,6 +5,9 @@ import type { Application, ResumeMatchResult, Resume } from "@/lib/types";
 import { ResumeMatchResultView } from "@/components/resume-match/ResumeMatchResultView";
 import { MatchResultsHistory } from "@/components/resume-match/MatchResultsHistory";
 import { SequentialLoading } from "@/components/ui/SequentialLoading";
+import type { ResumeContent } from "@/lib/validation/resume";
+import { emptyResumeContent } from "@/lib/validation/resume";
+import { ResumeStructuredEditor } from "@/components/resumes/ResumeStructuredEditor";
 
 interface ResumeMatchViewProps {
   initialApplicationId?: string | null;
@@ -17,7 +20,10 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
   const [resumeText, setResumeText] = useState("");
   const [resumeId, setResumeId] = useState("");
   const [storedResumes, setStoredResumes] = useState<Resume[]>([]);
-  const [resumeSource, setResumeSource] = useState<"paste" | "stored">("paste");
+  const [resumeSource, setResumeSource] = useState<"paste" | "stored" | "pdf">("paste");
+  const [pdfResumeContent, setPdfResumeContent] =
+    useState<ResumeContent>(emptyResumeContent());
+  const [parsingPdf, setParsingPdf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latestResult, setLatestResult] = useState<ResumeMatchResult | null>(null);
@@ -67,7 +73,12 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobDescriptionText,
-          resumeText: resumeSource === "paste" ? resumeText : undefined,
+          resumeText:
+            resumeSource === "paste"
+              ? resumeText
+              : resumeSource === "pdf"
+                ? JSON.stringify(pdfResumeContent, null, 2)
+                : undefined,
           applicationId: applicationId || null,
           resumeId: resumeSource === "stored" && resumeId ? resumeId : null,
         }),
@@ -91,6 +102,27 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
   }
 
   const displayedResult = selectedHistoryResult ?? latestResult;
+
+  async function handlePdfUpload(file: File | null) {
+    if (!file) return;
+    setParsingPdf(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/resumes/parse-pdf", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to parse PDF");
+      setPdfResumeContent(data.content);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to parse PDF");
+    } finally {
+      setParsingPdf(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -153,6 +185,14 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
               />
               Stored resume
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                checked={resumeSource === "pdf"}
+                onChange={() => setResumeSource("pdf")}
+              />
+              Upload PDF
+            </label>
           </div>
           {resumeSource === "stored" ? (
             <select
@@ -169,6 +209,32 @@ export function ResumeMatchView({ initialApplicationId = null }: ResumeMatchView
                 </option>
               ))}
             </select>
+          ) : resumeSource === "pdf" ? (
+            <div className="space-y-3 rounded-card border border-border bg-panel-subtle p-4">
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => handlePdfUpload(e.target.files?.[0] ?? null)}
+                className="input-field"
+              />
+              <p className="caption">
+                Review and correct the parsed structure before running the match.
+              </p>
+              {parsingPdf ? (
+                <SequentialLoading
+                  steps={[
+                    "Extracting PDF text...",
+                    "Segmenting resume sections...",
+                    "Preparing editable structure...",
+                  ]}
+                />
+              ) : (
+                <ResumeStructuredEditor
+                  content={pdfResumeContent}
+                  onChange={setPdfResumeContent}
+                />
+              )}
+            </div>
           ) : (
             <textarea
               required

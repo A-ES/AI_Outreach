@@ -82,7 +82,7 @@ export function DashboardView() {
       <div>
         <h1 className="page-title">Dashboard</h1>
         <p className="caption mt-1">
-          Overview of your job search progress
+          Week of {formatDate(weekStartDate)}
         </p>
       </div>
 
@@ -92,15 +92,11 @@ export function DashboardView() {
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-4">
         <StatCard label="Total applications" value={stats?.totalApplications ?? 0} />
         <StatCard label="Interviews" value={stats?.totalInterviews ?? 0} />
         <StatCard label="Offers" value={stats?.totalOffers ?? 0} />
-        <StatCard
-          label="Week of"
-          value={formatDate(weekStartDate)}
-          isText
-        />
+        <StatCard label="Follow-ups due" value={stats?.followUpsDue ?? 0} highlight={(stats?.followUpsDue ?? 0) > 0} />
       </div>
 
       {hasNoActivity && (
@@ -162,21 +158,11 @@ export function DashboardView() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  isText,
-}: {
-  label: string;
-  value: number | string;
-  isText?: boolean;
-}) {
+function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
-      <div className="card">
+    <div className="card">
       <p className="caption">{label}</p>
-      <p className={`mt-2 ${isText ? "text-lg font-medium" : "text-3xl font-semibold text-accent"}`}>
-        {value}
-      </p>
+      <p className={`mt-2 text-3xl font-semibold ${highlight ? "text-amber-600 dark:text-amber-400" : "text-accent"}`}>{value}</p>
     </div>
   );
 }
